@@ -1,0 +1,1710 @@
+extends Node2D
+## بوقی — مسابقه خیابانی شبانه از بالا (سبک کلاچ/NFS)
+## نه بازی کودکانه، نه پرش روی مخروط — فرمان، دریفت، نیترو، ترافیک، رقیب.
+## دوربین بالا؛ ماشین با فیزیک واقعی (گریپ لغزنده + دریفت دست‌برقه).
+
+const VIEW_W := 1280.0
+const VIEW_H := 720.0
+var ROAD_W := 260.0
+var laps := 2
+
+# فیزیک ماشین
+const ACC := 350.0
+const BRK := 800.0
+const TURN_RATE := 2.55
+const GRIP := 9.0
+const DRIFT_GRIP := 2.25
+const NITRO_MULT := 1.40
+# گیربکس مجازی — مرزهای دنده بر حسب کسر سرعت ماکزیمم (حس واقعی دور موتور)
+const GEARS := [0.0, 0.15, 0.31, 0.50, 0.72, 1.02]
+
+# پیست — از data/track_<tid>.json (بیک gen_tizpa_maps) بارگذاری می‌شود
+var layout_path := "res://data/track_valiasr.json"
+var WORLD_MIN := Vector2(360, 360)
+var WORLD_MAX := Vector2(5980, 5300)
+
+const FA_D := "۰۱۲۳۴۵۶۷۸۹"
+const RIVAL_POOL := ["pride_blue", "pejo_green", "shahin", "shahin_white", "samand", "dena", "dena_race", "quick", "tiba", "formula_blue", "formula_red", "formula_black"]
+
+var lv: Dictionary
+var theme_d := {}         # پالت زمان‌روز پیست (ambient/under)
+var elapsed := 0.0
+var ended := false
+var racing_over := false
+var autotest := false
+var autotest_full := false
+var shots := false
+
+# مسیر
+var seg_a: Array = []      # نقطه شروع هر سگمنت
+var seg_d: Array = []      # جهت هر سگمنت
+var seg_len: Array = []
+var cum: Array = []        # طول تجمعی
+var track_len := 0.0
+var buildings: Array = []  # {pos, rot, size} — از JSON
+var solids: Array = []     # {pos, r} — درخت/تیر/پارک‌شده از JSON
+var minimap: Control = null
+var map_rect := Rect2(240, 240, 5920, 4920)
+
+# بازیکن
+var car_pos := Vector2.ZERO
+var vel := Vector2.ZERO
+var heading := 0.0
+var path_s := 0.0          # تصویر موقعیت روی پیست
+var lap := 0
+var max_s := 620.0
+var grip_norm := GRIP
+var drifting := false
+var nitro_on := false
+var nitro_meter := 1.0
+var nitro_drain := 0.30
+var _nitro_was := false
+var gear := 1
+var rpm_s := 0.16
+var _shift_cd := 0.0
+var brake_glow: Sprite2D = null
+var puff: CPUParticles2D = null
+var steer_left := false
+var steer_right := false
+var brake_held := false
+var nitro_held := false
+var steer_ptrs := {}       # شناسه‌ی لمس → ‎-1 چپ / ‎+1 راست (ضد گیرکردن فرمان)
+var kb_left := false
+var kb_right := false
+var hint_l: Control
+var hint_r: Control
+var offroad := false
+var invuln_until := 0.0
+var bump_cd := 0.0
+var shake := 0.0
+
+# رقیب‌ها و ترافیک
+var rivals: Array = []     # {node, spr, s, spd, pace, lane, lane_cur, ang, corner}
+var traffic: Array = []    # {node, spr, s, dir, spd, lane}
+var finish_rank := 1
+
+# نودها
+var world: Node2D
+var marks: Node2D
+var car: Node2D
+var car_sprite: Sprite2D
+var cam: Camera2D
+var hud: CanvasLayer
+var best_label: Label
+var time_label: Label
+var mission_label: Label
+var pos_label: Label
+var lap_label: Label
+var kmh_label: Label
+var nitro_bar: ProgressBar
+var progress: ProgressBar
+var gauge: Control
+var flame: CPUParticles2D
+var smoke: CPUParticles2D
+var lines: Control
+var intro_label: Label
+var pause_btn: Button
+var pause_overlay: Control
+var end_panel: PanelContainer
+var end_title: Label
+var end_stars: Label
+var end_reward: Label
+var end_retry_btn: Button
+var end_menu_btn: Button
+var brain = null
+var car_anchor: Control
+var _intro_stage := -1
+var intro := 2.6
+var _auto_timer := 0.0
+var _at_stage := 0
+var _at_heading0 := 0.0
+var _spawn_traf_t := 0.4
+var _mark_t := 0.0
+var _drift_seen := false
+
+const BRAIN_SCRIPT := preload("res://scripts/car_brain.gd")
+
+func _ready() -> void:
+        autotest = OS.get_cmdline_user_args().has("--autotest")
+        autotest_full = OS.get_cmdline_user_args().has("--autotest-full")
+        shots = OS.get_cmdline_user_args().has("--shots")
+        if autotest_full and Globals.has_meta("at_retry"):
+                print("[tizpa][autotest] TAP-RETRY OK — بازی دوباره لود شد")
+        var lid: int = Globals.get_meta("start_level", 1)
+        for L2 in Globals.LEVELS:
+                if int(L2["id"]) == lid:
+                        lv = L2
+                        break
+        if lv.is_empty():
+                lv = Globals.LEVELS[0]
+        layout_path = "res://data/track_%s.json" % str(lv["track"])
+        laps = int(lv.get("laps", 2))
+        var stats: Dictionary = Globals.car_stats()
+        max_s = 620.0 * clampf(float(stats["accel"]), 0.85, 1.45)
+        grip_norm = GRIP * clampf(float(stats["jump"]), 0.8, 1.3)
+        nitro_drain = 0.34 / maxf(0.8, float(stats["turbo"]))
+        _build_track()
+        _build_world()
+        _build_car(stats)
+        _build_hud()
+        _spawn_rivals()
+        AudioMgr.play_music()
+        brain = BRAIN_SCRIPT.new()
+        add_child(brain)
+        car_anchor = Control.new()
+        car_anchor.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        car_anchor.size = Vector2.ZERO
+        hud.add_child(car_anchor)
+        mission_label.text = Globals.L("mission") + " " + fa(int(lv["id"])) + " — " + str(lv["name"])
+        var mtw := create_tween()
+        mtw.tween_interval(5.0)
+        mtw.tween_property(mission_label, "modulate:a", 0.0, 0.8)
+        if autotest_full:
+                _autotest_full()
+        if shots:
+                _run_shots()
+        if OS.get_cmdline_user_args().has("--playtest"):
+                _run_playtest()
+
+# ─────────────────────────── ریاضی مسیر ───────────────────────────
+func _build_track() -> void:
+        var txt := FileAccess.get_file_as_string(layout_path)
+        var j: Dictionary = JSON.parse_string(txt) if txt != "" else {}
+        if j.is_empty() or j.get("centerline", []).size() < 8:
+                push_error("track json missing: " + layout_path)
+                get_tree().quit(1)
+                return
+        var meta: Dictionary = j["meta"]
+        var r: Array = meta["rect"]
+        map_rect = Rect2(r[0], r[1], r[2] - r[0], r[3] - r[1])
+        ROAD_W = float(meta.get("road_half", 130.0)) * 2.0
+        theme_d = j.get("theme", {})
+        var wm: Array = meta.get("world_min", [360, 360])
+        var wx: Array = meta.get("world_max", [5980, 5300])
+        WORLD_MIN = Vector2(wm[0], wm[1])
+        WORLD_MAX = Vector2(wx[0], wx[1])
+        var pts: Array = j["centerline"]
+        var n := pts.size()
+        cum = [0.0]
+        for i in n:
+                var a: Vector2 = Vector2(pts[i][0], pts[i][1])
+                var b: Vector2 = Vector2(pts[(i + 1) % n][0], pts[(i + 1) % n][1])
+                var d := (b - a)
+                var l := maxf(d.length(), 0.001)
+                seg_a.append(a)
+                seg_d.append(d / l)
+                seg_len.append(l)
+                cum.append(cum[i] + l)
+        track_len = cum[n]
+
+func _path_pos(s: float) -> Vector2:
+        var ss := fposmod(s, track_len)
+        for i in seg_a.size():
+                if ss <= cum[i + 1] + 0.001:
+                        return seg_a[i] + seg_d[i] * (ss - cum[i])
+        return seg_a[0]
+
+func _path_dir(s: float) -> Vector2:
+        var ss := fposmod(s, track_len)
+        for i in seg_a.size():
+                if ss <= cum[i + 1] + 0.001:
+                        return seg_d[i]
+        return seg_d[0]
+
+## نزدیک‌ترین نقطه پیست + فاصله از آن (برای آفساید)
+func _nearest(p: Vector2) -> Dictionary:
+        var best_s := 0.0
+        var best_d := INF
+        for i in seg_a.size():
+                var rel: Vector2 = p - seg_a[i]
+                var t: float = clampf(rel.dot(seg_d[i]), 0.0, seg_len[i])
+                var q: Vector2 = seg_a[i] + seg_d[i] * t
+                var d := p.distance_to(q)
+                if d < best_d:
+                        best_d = d
+                        best_s = cum[i] + t
+        return {"s": best_s, "dist": best_d}
+
+# ─────────────────────────── ساخت دنیا ───────────────────────────
+func _build_world() -> void:
+        world = Node2D.new()
+        add_child(world)
+        var cm := CanvasModulate.new()
+        cm.color = Color(theme_d.get("ambient", [0.93, 0.95, 1.0])[0],
+                theme_d.get("ambient", [0.93, 0.95, 1.0])[1],
+                theme_d.get("ambient", [0.93, 0.95, 1.0])[2])
+        world.add_child(cm)
+        # زیرلایه‌ی تاریک کل دنیا — بیرونِ نقشه هم همان هوای پیست است
+        var und: Array = theme_d.get("under", [0.027, 0.031, 0.055])
+        var under := ColorRect.new()
+        under.color = Color(und[0], und[1], und[2])
+        under.position = map_rect.position - Vector2(4000, 4000)
+        under.size = map_rect.size + Vector2(8000, 8000)
+        # ⛔ فیکس باگ بزرگ: mouse_filter پیش‌فرض STOP است — این مستطیل تمام‌صفحه
+        # همه‌ی لمس‌ها را می‌بلعید و فرمان لمسی روی کل بازی مرده بود!
+        under.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        world.add_child(under)
+        # نقشه‌ی شهر — ۴ تایل بیک‌شده (gen_tizpa_maps) — کیفیت ۱:۱
+        var tw := map_rect.size.x * 0.5
+        var th := map_rect.size.y * 0.5
+        for i in 4:
+                var spr := Sprite2D.new()
+                spr.texture = load("res://assets/sprites/l%d_map_%d.jpg" % [int(lv["id"]), i])
+                spr.centered = false
+                spr.position = map_rect.position + Vector2(float(i % 2) * tw, float(i / 2) * th)
+                world.add_child(spr)
+        marks = SkidMarks.new()
+        marks.z_index = 2
+        world.add_child(marks)
+        _load_city()
+
+## رد لاستیک — دریفت واقعی روی آسفالت می‌ماند
+class SkidMarks extends Node2D:
+        var segs: Array = []  # {pos, ang}
+        var MAX := 520
+
+        func add(p: Vector2, ang: float) -> void:
+                segs.append({"pos": p, "ang": ang})
+                if segs.size() > MAX:
+                        segs.pop_front()
+                queue_redraw()
+
+        func _draw() -> void:
+                for s in segs:
+                        draw_set_transform_matrix(Transform2D(s["ang"], s["pos"]))
+                        draw_rect(Rect2(-11, -3, 22, 6), Color(0.03, 0.03, 0.05, 0.5))
+                draw_set_transform_matrix(Transform2D())
+
+func _load_city() -> void:
+        var txt := FileAccess.get_file_as_string(layout_path)
+        var j: Dictionary = JSON.parse_string(txt) if txt != "" else {}
+        for b in j.get("buildings", []):
+                buildings.append({
+                        "pos": Vector2(b[0], b[1]),
+                        "rot": deg_to_rad(float(b[2])),
+                        "size": Vector2(b[3], b[4]),
+                })
+        for s in j.get("solids", []):
+                solids.append({"pos": Vector2(s[0], s[1]), "r": float(s[2])})
+
+# ─────────────────────────── ساخت ماشین ───────────────────────────
+func _car_tex_path(id: String) -> String:
+        var top := "res://assets/sprites/" + id + "_top.png"
+        if ResourceLoader.exists(top):
+                return top
+        # ⛔ هرگز اسپرایت کناری (چشم‌دار) از بالا نشان داده نمی‌شود — جایگزین: بوقی
+        return "res://assets/sprites/boghi_top.png"
+
+func _make_car_node(id: String, with_fx: bool, light_alpha: float) -> Dictionary:
+        var n := Node2D.new()
+        var lmat := CanvasItemMaterial.new()
+        lmat.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+        # مخروط نور جلو — بافت نرم (نه ذوزنقه‌ی تخت)
+        var cone := Sprite2D.new()
+        cone.texture = load("res://assets/sprites/headlight_cone.png")
+        cone.centered = false
+        cone.position = Vector2(52, -192)
+        cone.scale = Vector2(1.15, 1.15)
+        cone.material = lmat
+        cone.modulate = Color(1.0, 0.96, 0.85, clampf(light_alpha * 6.5, 0.0, 0.85))
+        cone.z_index = -1
+        n.add_child(cone)
+        var sh := Sprite2D.new()
+        sh.texture = _make_shadow_tex()
+        sh.scale = Vector2(1.22, 1.0)
+        sh.modulate = Color(1, 1, 1, 0.55)
+        sh.z_index = -1
+        n.add_child(sh)
+        var spr := Sprite2D.new()
+        spr.texture = load(_car_tex_path(id))
+        spr.scale = Vector2.ONE # اسپرایت نو نسبت ۲٫۳:۱ دارد
+        n.add_child(spr)
+        # آندرگلوی نئون — امضای شبانه‌ی NFS زیر هر ماشین
+        var ug := Polygon2D.new()
+        ug.polygon = _ellipse_pts(Vector2(0, 8), Vector2(88, 32))
+        var uh := 0.0
+        for ch in id:
+                uh = fmod(uh + float(ch.unicode_at(0)) * 0.113, 1.0)
+        ug.color = Color.from_hsv(uh, 0.85, 1.0, 0.34)
+        var ugmat := CanvasItemMaterial.new()
+        ugmat.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+        ug.material = ugmat
+        ug.z_index = -1
+        n.add_child(ug)
+        var fl: CPUParticles2D = null
+        var sm: CPUParticles2D = null
+        var pf: CPUParticles2D = null
+        var brk := Sprite2D.new()
+        brk.texture = load("res://assets/sprites/light_soft.png")
+        brk.position = Vector2(-93, 0)
+        brk.scale = Vector2(0.55, 0.40)
+        brk.modulate = Color(1.0, 0.16, 0.10, 0.10)
+        var bmat := CanvasItemMaterial.new()
+        bmat.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+        brk.material = bmat
+        brk.z_index = 1
+        n.add_child(brk)
+        if with_fx:
+                fl = CPUParticles2D.new()
+                fl.position = Vector2(-95, 0)
+                fl.emitting = false
+                fl.amount = 26
+                fl.lifetime = 0.3
+                fl.direction = Vector2(-1, 0)
+                fl.spread = 12.0
+                fl.initial_velocity_min = 240.0
+                fl.initial_velocity_max = 420.0
+                fl.scale_amount_min = 3.0
+                fl.scale_amount_max = 6.5
+                fl.texture = load("res://assets/sprites/flame.png")
+                var fg := Gradient.new()
+                fg.offsets = PackedFloat32Array([0.0, 0.6, 1.0])
+                fg.colors = PackedColorArray([Color(1, 1, 1, 1), Color(0.75, 0.85, 1.0, 0.8), Color(0.4, 0.5, 1.0, 0.0)])
+                fl.color_ramp = fg
+                fl.scale_amount_min = 0.55
+                fl.scale_amount_max = 0.95
+                n.add_child(fl)
+                var sm2 := CPUParticles2D.new()
+                sm2.position = Vector2(-84, 24)
+                sm2.emitting = false
+                sm2.amount = 20
+                sm2.lifetime = 0.8
+                sm2.direction = Vector2(0, 0)
+                sm2.spread = 180.0
+                sm2.initial_velocity_min = 30.0
+                sm2.initial_velocity_max = 90.0
+                sm2.scale_amount_min = 4.0
+                sm2.scale_amount_max = 9.0
+                sm2.texture = load("res://assets/sprites/smoke.png")
+                var sg := Gradient.new()
+                sg.offsets = PackedFloat32Array([0.0, 1.0])
+                sg.colors = PackedColorArray([Color(1, 1, 1, 0.55), Color(0.85, 0.85, 0.9, 0.0)])
+                sm2.color_ramp = sg
+                sm2.scale_amount_min = 0.6
+                sm2.scale_amount_max = 1.15
+                sm = sm2
+                n.add_child(sm2)
+                # دود آرام اگزوز درجا — نفس موتور خام
+                pf = CPUParticles2D.new()
+                pf.position = Vector2(-97, 8)
+                pf.emitting = false
+                pf.amount = 7
+                pf.lifetime = 1.15
+                pf.direction = Vector2(-1, 0)
+                pf.spread = 15.0
+                pf.initial_velocity_min = 24.0
+                pf.initial_velocity_max = 58.0
+                pf.scale_amount_min = 2.2
+                pf.scale_amount_max = 4.2
+                pf.texture = load("res://assets/sprites/smoke.png")
+                var pg := Gradient.new()
+                pg.offsets = PackedFloat32Array([0.0, 1.0])
+                pg.colors = PackedColorArray([Color(0.76, 0.76, 0.8, 0.3), Color(0.7, 0.7, 0.76, 0.0)])
+                pf.color_ramp = pg
+                n.add_child(pf)
+        return {"node": n, "spr": spr, "flame": fl, "smoke": sm, "puff": pf, "brake": brk}
+
+func _build_car(stats: Dictionary) -> void:
+        car = Node2D.new()
+        car.z_index = 5
+        var fx := _make_car_node(str(Globals.CARS[Globals.selected_car]["id"]), true, 0.10)
+        car.add_child(fx["node"])
+        world.add_child(car)
+        car_sprite = fx["spr"]
+        flame = fx["flame"]
+        smoke = fx["smoke"]
+        puff = fx["puff"]
+        brake_glow = fx["brake"]
+        car_pos = _path_pos(0.0)
+        heading = _path_dir(0.0).angle()
+        car.position = car_pos
+        car.rotation = heading
+        cam = Camera2D.new()
+        cam.zoom = Vector2(1.02, 1.02)
+        add_child(cam)
+        # ⛔ فیکس «ماشین را ندیدم»: دوربین از همان فریم اول پشت ماشین است، نه مبدأ دنیا
+        cam.position = car_pos + _path_dir(0.0) * 180.0
+        cam.make_current()
+
+func _spawn_rivals() -> void:
+        var pool := RIVAL_POOL.duplicate()
+        pool.shuffle()
+        var starts := [90.0, 180.0, 270.0, 360.0]
+        var lanes := [-58.0, 58.0, -58.0, 58.0]
+        var skill := float(lv.get("skill", 0.95))
+        for i in int(lv.get("rivals", 3)):
+                var id: String = pool[i % pool.size()]
+                var fx := _make_car_node(id, false, 0.055)
+                world.add_child(fx["node"])
+                fx["node"].z_index = 4
+                fx["spr"].scale = Vector2.ONE
+                rivals.append({
+                        "node": fx["node"], "spr": fx["spr"],
+                        "s": float(starts[i % 4]), "spd": 0.0,
+                        "pace": skill * randf_range(0.975, 1.025),
+                        "lane": float(lanes[i % 4]), "lane_cur": float(lanes[i % 4]),
+                        "ang": 0.0, "corner": false, "mt": 0.0,
+                        "brake": fx["brake"], "dec": false,
+                })
+
+func _spawn_traffic(s_abs: float) -> void:
+        var ids := ["traf_white", "traf_gray", "traf_taxi", "traf_van"]
+        var id: String = ids[randi_range(0, ids.size() - 1)]
+        var fx := _make_car_node(id, false, 0.035)
+        world.add_child(fx["node"])
+        fx["node"].z_index = 3
+        fx["spr"].scale = Vector2.ONE
+        var dir := 1.0
+        if randf() < 0.22:
+                dir = -1.0
+        var lane := 58.0 * dir
+        traffic.append({
+                "node": fx["node"], "spr": fx["spr"],
+                "s": s_abs, "dir": dir, "spd": randf_range(150.0, 250.0), "lane": lane,
+        })
+
+func _fmt_time(t: float) -> String:
+        var m := int(t) / 60
+        var s := int(t) % 60
+        var d := int(fmod(t, 1.0) * 10.0)
+        return fa(m) + ":" + ("۰" if s < 10 else "") + fa(s) + "٫" + fa(d)
+
+func _ellipse_pts(c: Vector2, r: Vector2) -> PackedVector2Array:
+        var pts := PackedVector2Array()
+        for i in 24:
+                var a := TAU * float(i) / 24.0
+                pts.append(c + Vector2(cos(a) * r.x, sin(a) * r.y))
+        return pts
+
+func _make_shadow_tex() -> ImageTexture:
+        var sz := Vector2i(150, 90)
+        var img := Image.create(sz.x, sz.y, false, Image.FORMAT_RGBA8)
+        var cx := sz.x / 2.0
+        var cy := sz.y / 2.0
+        for y in sz.y:
+                for x in sz.x:
+                        var d := Vector2((x - cx) / (cx - 5.0), (y - cy) / (cy - 5.0)).length()
+                        var a: float = clamp(1.0 - d, 0.0, 1.0)
+                        img.set_pixel(x, y, Color(0.0, 0.0, 0.02, a * a * 0.85))
+        return ImageTexture.create_from_image(img)
+
+# ─────────────────────────── HUD مسابقه ───────────────────────────
+func _build_hud() -> void:
+        hud = CanvasLayer.new()
+        hud.process_mode = Node.PROCESS_MODE_ALWAYS
+        add_child(hud)
+        var font: FontFile = load("res://assets/fonts/Lalezar-Regular.ttf")
+        var bold: FontFile = load("res://assets/fonts/Vazirmatn-Bold.ttf")
+
+        # فرمان لمسی = سراسری (در _unhandled_input) — دیگر هیچ زون‌گیر‌کردنی وجود ندارد.
+        # راهنمای بصری گوشه‌ها — فقط وقتی واقعاً می‌فرمانی روشن می‌شوند
+        hint_l = SteerHint.new()
+        hint_l.game = self
+        hint_l.dir = -1
+        hint_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        _place(hint_l, 0.0, 1.0, 0.0, 1.0, 36, -150, 156, -30)
+        hud.add_child(hint_l)
+        hint_r = SteerHint.new()
+        hint_r.game = self
+        hint_r.dir = 1
+        hint_r.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        _place(hint_r, 1.0, 1.0, 1.0, 1.0, -156, -150, -36, -30)
+        hud.add_child(hint_r)
+
+        # جایگاه — بالای وسط، بزرگ و طلایی (NFS)
+        pos_label = _hud_label(font, 58, Vector2.ZERO, Color(0.98, 0.8, 0.2))
+        pos_label.add_theme_constant_override("outline_size", 12)
+        _place(pos_label, 0.5, 0.0, 0.5, 0.0, -160, 44, 160, 116)
+        pos_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+        lap_label = _hud_label(font, 30, Vector2.ZERO, Color(0.95, 0.95, 0.98, 0.9))
+        _place(lap_label, 0.5, 0.0, 0.5, 0.0, -160, 112, 160, 152)
+        lap_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+
+        # نوار پیشرفت کل مسابقه
+        progress = ProgressBar.new()
+        progress.min_value = 0
+        progress.max_value = 100
+        progress.value = 0
+        progress.show_percentage = false
+        progress.add_theme_stylebox_override("background", _sb(Color(0.08, 0.08, 0.12, 0.8), Color(0.5, 0.45, 0.3, 0.6), 6, 1, false))
+        progress.add_theme_stylebox_override("fill", _sb(Color(0.95, 0.62, 0.12), Color(0.7, 0.4, 0.05), 6, 0, false))
+        progress.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        hud.add_child(progress)
+        _place(progress, 0.5, 0.0, 0.5, 0.0, -140, 154, 140, 170)
+
+        best_label = _hud_label(font, 34, Vector2.ZERO, Color(0.95, 0.75, 0.1))
+        _place(best_label, 1.0, 0.0, 1.0, 0.0, -280, 46, -70, 96)
+        time_label = _hud_label(font, 32, Vector2.ZERO, Color(0.95, 0.95, 0.98, 0.95))
+        _place(time_label, 1.0, 0.0, 1.0, 0.0, -280, 100, -70, 144)
+        mission_label = _hud_label(font, 24, Vector2.ZERO, Color(0.9, 0.9, 0.95, 0.85))
+        _place(mission_label, 0.0, 0.0, 1.0, 0.0, 240, 176, -240, 214)
+        mission_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+
+        # دکمه توقف — بالا چپ
+        pause_btn = Button.new()
+        pause_btn.text = "II"
+        pause_btn.add_theme_font_override("font", font)
+        pause_btn.add_theme_font_size_override("font_size", 34)
+        _style_btn(pause_btn, false)
+        hud.add_child(pause_btn)
+        _place(pause_btn, 0.0, 0.0, 0.0, 0.0, 24, 46, 116, 122)
+        pause_btn.pressed.connect(_toggle_pause)
+
+        # مینی‌مپ — گوشه‌ی پایین-راست (سبک NFS)
+        minimap = MiniMap.new()
+        minimap.game = self
+        minimap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        _place(minimap, 1.0, 0.0, 1.0, 0.0, -252, 158, -28, 350)
+        hud.add_child(minimap)
+
+        # نیترو — دکمه بزرگ آبی، بالا-وسطِ زون راست (انگشت راست راحت می‌رسد)
+        var btn_nitro := Button.new()
+        btn_nitro.text = Globals.L("nitro")
+        btn_nitro.add_theme_font_override("font", font)
+        btn_nitro.add_theme_font_size_override("font_size", 44)
+        var nfs := _sb(Color(0.09, 0.20, 0.38, 0.78), Color(0.45, 0.72, 1.0, 0.75), 22, 2)
+        btn_nitro.add_theme_stylebox_override("normal", nfs)
+        btn_nitro.add_theme_stylebox_override("hover", _sb(Color(0.13, 0.27, 0.48, 0.85), Color(0.6, 0.82, 1.0, 0.9), 22, 2))
+        btn_nitro.add_theme_stylebox_override("pressed", _sb(Color(0.06, 0.14, 0.28, 0.9), Color(0.45, 0.72, 1.0, 0.9), 22, 2))
+        btn_nitro.add_theme_stylebox_override("disabled", nfs)
+        btn_nitro.add_theme_color_override("font_color", Color(0.88, 0.95, 1.0))
+        btn_nitro.add_theme_color_override("font_pressed_color", Color(1, 1, 1))
+        btn_nitro.button_down.connect(func(): nitro_held = true)
+        btn_nitro.button_up.connect(func(): nitro_held = false)
+        hud.add_child(btn_nitro)
+        _place(btn_nitro, 1.0, 1.0, 1.0, 1.0, -500, -190, -260, -50)
+
+        # ترمز — دکمه قرمز تیره بالا-وسطِ زون چپ
+        var btn_brake := Button.new()
+        btn_brake.text = "ترمز"
+        btn_brake.add_theme_font_override("font", font)
+        btn_brake.add_theme_font_size_override("font_size", 38)
+        btn_brake.add_theme_stylebox_override("normal", _sb(Color(0.34, 0.10, 0.10, 0.78), Color(0.9, 0.42, 0.35, 0.65), 22, 2))
+        btn_brake.add_theme_stylebox_override("hover", _sb(Color(0.42, 0.14, 0.13, 0.85), Color(1.0, 0.5, 0.42, 0.8), 22, 2))
+        btn_brake.add_theme_stylebox_override("pressed", _sb(Color(0.24, 0.07, 0.07, 0.9), Color(0.9, 0.42, 0.35, 0.9), 22, 2))
+        btn_brake.add_theme_stylebox_override("disabled", _sb(Color(0.34, 0.10, 0.10, 0.78), Color(0.9, 0.42, 0.35, 0.65), 22, 2))
+        btn_brake.add_theme_color_override("font_color", Color(1.0, 0.92, 0.88))
+        btn_brake.button_down.connect(func(): brake_held = true)
+        btn_brake.button_up.connect(func(): brake_held = false)
+        hud.add_child(btn_brake)
+        _place(btn_brake, 0.0, 1.0, 0.0, 1.0, 260, -190, 500, -50)
+
+        # گیج نیترو — باریک، بالای گیج سرعت
+        nitro_bar = ProgressBar.new()
+        nitro_bar.min_value = 0
+        nitro_bar.max_value = 100
+        nitro_bar.value = 100
+        nitro_bar.show_percentage = false
+        nitro_bar.add_theme_stylebox_override("background", _sb(Color(0.07, 0.08, 0.14, 0.85), Color(0.3, 0.5, 0.9, 0.7), 6, 1, false))
+        nitro_bar.add_theme_stylebox_override("fill", _sb(Color(0.25, 0.65, 1.0), Color(0.15, 0.4, 0.9), 6, 0, false))
+        nitro_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        hud.add_child(nitro_bar)
+        _place(nitro_bar, 0.5, 1.0, 0.5, 1.0, -110, -192, 110, -170)
+
+        # گیج سرعت — سفارشی (قوس + عقربه) + عدد کیلومتر
+        gauge = SpeedGauge.new()
+        gauge.game = self
+        gauge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        _place(gauge, 0.5, 1.0, 0.5, 1.0, -125, -185, 125, -35)
+        hud.add_child(gauge)
+        kmh_label = _hud_label(font, 56, Vector2.ZERO, Color(0.98, 0.98, 1.0))
+        kmh_label.add_theme_constant_override("outline_size", 10)
+        kmh_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+        _place(kmh_label, 0.5, 1.0, 0.5, 1.0, -90, -134, 90, -74)
+
+        # خطوط سرعت نیترو
+        lines = SpeedLines.new()
+        lines.size = Vector2(VIEW_W, VIEW_H)
+        lines.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        lines.visible = false
+        hud.add_child(lines)
+
+        # شمارش معکوس
+        intro_label = Label.new()
+        intro_label.add_theme_font_override("font", font)
+        intro_label.add_theme_font_size_override("font_size", 130)
+        intro_label.add_theme_color_override("font_color", Color(0.98, 0.8, 0.2))
+        intro_label.add_theme_color_override("font_outline_color", Color(0.12, 0.05, 0.02))
+        intro_label.add_theme_constant_override("outline_size", 24)
+        intro_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+        intro_label.anchor_left = 0.0
+        intro_label.anchor_right = 1.0
+        intro_label.anchor_top = 0.335
+        intro_label.anchor_bottom = 0.335
+        intro_label.offset_top = -90.0
+        intro_label.offset_bottom = 100.0
+        intro_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        intro_label.z_index = 30
+        hud.add_child(intro_label)
+
+        # پرده توقف
+        pause_overlay = Control.new()
+        pause_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+        pause_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        pause_overlay.visible = false
+        var pv := ColorRect.new()
+        pv.color = Color(0, 0, 0, 0.6)
+        pv.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+        pv.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        pause_overlay.add_child(pv)
+        var pl := Label.new()
+        pl.text = Globals.L("paused")
+        pl.add_theme_font_override("font", bold)
+        pl.add_theme_font_size_override("font_size", 46)
+        pl.add_theme_color_override("font_color", Color(0.95, 0.93, 0.85))
+        pl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+        pl.anchor_left = 0.0
+        pl.anchor_right = 1.0
+        pl.anchor_top = 0.28
+        pl.anchor_bottom = 0.38
+        pl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        pause_overlay.add_child(pl)
+        # دکمه‌های توقف — ادامه/دوباره/منو
+        var pvb := VBoxContainer.new()
+        pvb.anchor_left = 0.5
+        pvb.anchor_right = 0.5
+        pvb.anchor_top = 0.42
+        pvb.anchor_bottom = 0.42
+        pvb.offset_left = -150
+        pvb.offset_right = 150
+        pvb.offset_top = 0
+        pvb.offset_bottom = 240
+        pvb.add_theme_constant_override("separation", 12)
+        pause_overlay.add_child(pvb)
+        var b_resume := Button.new()
+        b_resume.text = Globals.L("resume") if Globals.I18N.has("resume") else "ادامه"
+        b_resume.add_theme_font_override("font", bold)
+        b_resume.add_theme_font_size_override("font_size", 30)
+        _style_btn(b_resume, true)
+        b_resume.pressed.connect(_toggle_pause)
+        pvb.add_child(b_resume)
+        var b_restart := Button.new()
+        b_restart.text = Globals.L("retry")
+        b_restart.add_theme_font_override("font", bold)
+        b_restart.add_theme_font_size_override("font_size", 30)
+        _style_btn(b_restart, false)
+        b_restart.pressed.connect(func():
+                get_tree().paused = false
+                get_tree().change_scene_to_file("res://scenes/game.tscn"))
+        pvb.add_child(b_restart)
+        var b_exit := Button.new()
+        b_exit.text = Globals.L("menu")
+        b_exit.add_theme_font_override("font", bold)
+        b_exit.add_theme_font_size_override("font_size", 30)
+        _style_btn(b_exit, false)
+        b_exit.pressed.connect(func():
+                get_tree().paused = false
+                get_tree().change_scene_to_file("res://scenes/menu.tscn"))
+        pvb.add_child(b_exit)
+        hud.add_child(pause_overlay)
+
+func _hud_label(font: FontFile, size: int, pos: Vector2, col: Color) -> Label:
+        var l := Label.new()
+        l.add_theme_font_override("font", font)
+        l.add_theme_font_size_override("font_size", size)
+        l.add_theme_color_override("font_color", col)
+        l.add_theme_color_override("font_outline_color", Color(0.06, 0.05, 0.1))
+        l.add_theme_constant_override("outline_size", 8)
+        l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        hud.add_child(l)
+        return l
+
+func _place(c: Control, al: float, at: float, ar: float, ab: float, ol: float, ot: float, orr: float, ob: float) -> void:
+        c.anchor_left = al
+        c.anchor_top = at
+        c.anchor_right = ar
+        c.anchor_bottom = ab
+        c.offset_left = ol
+        c.offset_top = ot
+        c.offset_right = orr
+        c.offset_bottom = ob
+
+func _sb(bg: Color, border: Color, radius: int, bw: int = 0, shadow := true) -> StyleBoxFlat:
+        var sb := StyleBoxFlat.new()
+        sb.bg_color = bg
+        sb.set_corner_radius_all(radius)
+        sb.border_color = border
+        sb.border_width_left = bw
+        sb.border_width_right = bw
+        sb.border_width_top = bw
+        sb.border_width_bottom = bw + (4 if bw > 0 else 0)
+        if shadow:
+                sb.shadow_color = Color(0, 0, 0, 0.35)
+                sb.shadow_size = 6
+        return sb
+
+func _style_btn(b: Button, primary := true) -> void:
+        var base := Color(0.16, 0.42, 0.60) if primary else Color(0.16, 0.17, 0.24)
+        var dark := Color(0.10, 0.28, 0.42) if primary else Color(0.35, 0.38, 0.5)
+        b.add_theme_stylebox_override("normal", _sb(base, dark, 16, 2))
+        b.add_theme_stylebox_override("hover", _sb(base.lightened(0.08), dark, 16, 2))
+        b.add_theme_stylebox_override("pressed", _sb(dark, dark, 16, 2))
+        b.add_theme_stylebox_override("disabled", _sb(Color(0.2, 0.2, 0.26), Color(0.4, 0.4, 0.5), 16, 2))
+        var fg := Color(0.96, 0.97, 1.0)
+        b.add_theme_color_override("font_color", fg)
+        b.add_theme_color_override("font_hover_color", fg)
+        b.add_theme_color_override("font_focus_color", fg)
+        b.add_theme_color_override("font_pressed_color", Color(1, 1, 1))
+        b.add_theme_color_override("font_disabled_color", Color(0.55, 0.55, 0.62))
+
+## گیج سرعت — قوس + عقربه، حس داشبورد
+class SpeedGauge extends Control:
+        var game: Node2D
+        var frac := 0.0
+
+        func _process(_delta: float) -> void:
+                if game == null:
+                        return
+                var tgt: float = clampf(absf(game.vel.length()) / (game.max_s * 1.45), 0.0, 1.0)
+                frac = lerpf(frac, tgt, _delta * 8.0)
+                queue_redraw()
+
+        func _draw() -> void:
+                var c := size * 0.5
+                c.y = size.y * 0.86
+                var r := minf(size.x * 0.46, size.y * 0.8)
+                var a0 := PI * 0.78
+                var a1 := PI * 2.22
+                # ناحیه‌ی سرخ سرعت
+                draw_arc(c, r, a0 + (a1 - a0) * 0.78, a1, 40, Color(0.75, 0.16, 0.12, 0.55), 11.0, true)
+                draw_arc(c, r, a0, a1, 40, Color(0.08, 0.09, 0.14, 0.8), 11.0, true)
+                # تیک‌ها
+                for k in 11:
+                        var ta := a0 + (a1 - a0) * k / 10.0
+                        var p1 := c + Vector2(cos(ta), sin(ta)) * (r - 12.0)
+                        var p2 := c + Vector2(cos(ta), sin(ta)) * (r - 22.0)
+                        draw_line(p1, p2, Color(0.75, 0.78, 0.86, 0.5), 2.0, true)
+                var ac := Color(0.55, 0.85, 1.0).lerp(Color(1.0, 0.32, 0.12), frac)
+                if frac > 0.02:
+                        draw_arc(c, r, a0, a0 + (a1 - a0) * frac, 40, ac, 7.0, true)
+                var na := a0 + (a1 - a0) * frac
+                var tip := c + Vector2(cos(na), sin(na)) * (r - 20.0)
+                draw_line(c, tip, Color(0.97, 0.97, 1.0, 0.95), 4.0, true)
+                draw_circle(c, 7.0, Color(0.88, 0.88, 0.96, 0.95))
+
+## خطوط سرعت نیترو
+class SpeedLines extends Control:
+        var t := 0.0
+
+        func _process(delta: float) -> void:
+                t += delta
+                if visible:
+                        queue_redraw()
+
+        func _draw() -> void:
+                var rng := RandomNumberGenerator.new()
+                rng.seed = int(t * 30.0)
+                var c := size * 0.5
+                for i in 22:
+                        var ang := rng.randf_range(0.0, TAU)
+                        var r0 := rng.randf_range(430.0, 760.0)
+                        var ln := rng.randf_range(90.0, 260.0)
+                        var dirv := Vector2(cos(ang), sin(ang))
+                        var p0 := c + dirv * r0
+                        var p1 := c + dirv * (r0 + ln)
+                        draw_line(p0, p1, Color(0.8, 0.9, 1.0, rng.randf_range(0.05, 0.14)), 2.5)
+
+# ─────────────────────────── ورودی ───────────────────────────
+## فرمان لمسی ضدباگ: هر انگشت با شناسه‌اش ثبت می‌شود؛ رهاکردن در هر نقطه‌ای
+## یا کشیدن انگشت از یک نیمه به نیمه‌ی دیگر همیشه درست کار می‌کند.
+func _side_of(pos: Vector2) -> int:
+        return -1 if pos.x < VIEW_W * 0.5 else 1
+
+func _unhandled_input(e: InputEvent) -> void:
+        if e is InputEventScreenTouch:
+                if e.pressed and e.position.y > VIEW_H * 0.24:
+                        steer_ptrs[e.index] = _side_of(e.position)
+                elif not e.pressed:
+                        steer_ptrs.erase(e.index)
+        elif e is InputEventScreenDrag:
+                if steer_ptrs.has(e.index):
+                        steer_ptrs[e.index] = _side_of(e.position)
+        elif e is InputEventMouseButton:
+                if e.button_index == MOUSE_BUTTON_LEFT:
+                        if e.pressed and e.position.y > VIEW_H * 0.24:
+                                steer_ptrs[2001] = _side_of(e.position)
+                        elif not e.pressed:
+                                steer_ptrs.erase(2001)
+        if e is InputEventKey and e.pressed:
+                if e.keycode == KEY_LEFT or e.keycode == KEY_A:
+                        kb_left = true
+                elif e.keycode == KEY_RIGHT or e.keycode == KEY_D:
+                        kb_right = true
+                elif e.keycode == KEY_DOWN or e.keycode == KEY_S:
+                        brake_held = true
+                elif e.keycode == KEY_SPACE or e.keycode == KEY_X or e.keycode == KEY_UP:
+                        nitro_held = true
+        if e is InputEventKey and not e.pressed:
+                if e.keycode == KEY_LEFT or e.keycode == KEY_A:
+                        kb_left = false
+                elif e.keycode == KEY_RIGHT or e.keycode == KEY_D:
+                        kb_right = false
+                elif e.keycode == KEY_DOWN or e.keycode == KEY_S:
+                        brake_held = false
+                elif e.keycode == KEY_SPACE or e.keycode == KEY_X or e.keycode == KEY_UP:
+                        nitro_held = false
+
+## مشتق نهایی فرمان — هر فریم قبل از فیزیک
+func _derive_steer() -> void:
+        var pl := kb_left
+        var pr := kb_right
+        for v in steer_ptrs.values():
+                if int(v) < 0:
+                        pl = true
+                else:
+                        pr = true
+        steer_left = pl
+        steer_right = pr
+        if hint_l != null:
+                hint_l.amt = lerpf(float(hint_l.amt), 1.0 if steer_left else 0.0, 0.25)
+                hint_l.queue_redraw()
+        if hint_r != null:
+                hint_r.amt = lerpf(float(hint_r.amt), 1.0 if steer_right else 0.0, 0.25)
+                hint_r.queue_redraw()
+
+## مینی‌مپ — مسیر + جای ماشین‌ها (سبک NFS)
+class MiniMap extends Control:
+        var game: Node2D
+        var acc := 0.0
+
+        func _process(delta: float) -> void:
+                acc += delta
+                if acc > 0.08:
+                        acc = 0.0
+                        queue_redraw()
+
+        func _draw() -> void:
+                if game == null or game.seg_a.is_empty():
+                        return
+                var g := game
+                var pad := 10.0
+                var sw := size.x - pad * 2.0
+                var sh := size.y - pad * 2.0
+                var sc: float = minf(sw / g.map_rect.size.x, sh / g.map_rect.size.y)
+                var off: Vector2 = (size - Vector2(g.map_rect.size.x, g.map_rect.size.y) * sc) * 0.5
+                draw_rect(Rect2(Vector2.ZERO, size), Color(0.05, 0.06, 0.10, 0.72))
+                draw_rect(Rect2(Vector2(2, 2), size - Vector2(4, 4)), Color(0.85, 0.68, 0.28, 0.35), false, 1.5)
+                var pts := PackedVector2Array()
+                for i in range(0, g.seg_a.size(), 4):
+                        pts.append(g.seg_a[i] * sc + off)
+                if pts.size() > 2:
+                        pts.append(pts[0])
+                        draw_polyline(pts, Color(0.55, 0.60, 0.72, 0.9), 3.0, true)
+                # خط پایان
+                var st: Vector2 = g.seg_a[0] * sc + off
+                draw_circle(st, 3.5, Color(0.95, 0.95, 1.0, 0.9))
+                for R in g.rivals:
+                        var rp: Vector2 = R["node"].position * sc + off
+                        draw_circle(rp, 4.0, Color(0.95, 0.35, 0.30, 0.95))
+                if g.car != null:
+                        var pp: Vector2 = g.car.position * sc + off
+                        draw_circle(pp, 5.0, Color(1.0, 0.82, 0.2, 1.0))
+                        draw_circle(pp, 7.5, Color(1.0, 0.82, 0.2, 0.35))
+
+## فلش‌های گوشه — جای متن «چپ/راست»، بدون یک کلمه
+class SteerHint extends Control:
+        var game: Node2D
+        var dir := -1
+        var amt := 0.0
+
+        func _draw() -> void:
+                if amt < 0.02:
+                        return
+                var c := size * 0.5
+                var col := Color(1.0, 0.95, 0.75, 0.30 * amt)
+                for k in 3:
+                        var x := c.x + float(dir) * (k - 1) * 26.0
+                        draw_polyline(PackedVector2Array([
+                                Vector2(x + float(dir) * 14.0, c.y - 22.0),
+                                Vector2(x - float(dir) * 14.0, c.y),
+                                Vector2(x + float(dir) * 14.0, c.y + 22.0),
+                        ]), col, 7.0, true)
+
+func _toggle_pause() -> void:
+        if ended and not racing_over:
+                return
+        var t := get_tree()
+        t.paused = not t.paused
+        if pause_overlay != null:
+                pause_overlay.visible = t.paused
+        AudioMgr.set_engine(not t.paused, 0.3)
+        AudioMgr.set_skid(not t.paused, 0.0)
+        AudioMgr.set_wind(0.0 if t.paused else 0.2)
+
+# ─────────────────────────── حلقه اصلی ───────────────────────────
+func _process(delta: float) -> void:
+        if get_tree().paused:
+                return
+        elapsed += delta
+
+        # شمارش معکوس — موتور زنده است، دنیا نفس نگه می‌دارد
+        if intro > 0.0 and not racing_over:
+                intro -= delta
+                var stage := int((2.6 - maxf(intro, 0.0)) / 0.65)
+                if stage != _intro_stage and stage <= 4:
+                        _intro_stage = stage
+                        if stage < 3:
+                                intro_label.text = fa(3 - stage)
+                                AudioMgr.play_sfx("beep")
+                        else:
+                                intro_label.text = Globals.L("go")
+                                AudioMgr.play_sfx("horn")
+                                intro_label.add_theme_color_override("font_color", Color(0.3, 0.95, 0.5))
+                                cam.zoom = Vector2(1.18, 1.18)
+                        intro_label.pivot_offset = Vector2(get_viewport_rect().size.x * 0.5, 95.0)
+                        intro_label.scale = Vector2(1.6, 1.6)
+                        intro_label.modulate.a = 1.0
+                        var itw := create_tween()
+                        itw.tween_property(intro_label, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+                        itw.parallel().tween_property(intro_label, "modulate:a", 0.0, 0.4).set_delay(0.25)
+                if intro <= 0.0:
+                        intro_label.visible = false
+                AudioMgr.set_engine_ex(true, clampf(0.85 - intro * 0.3, 0.15, 0.85), 0.55, false)
+                cam.zoom = cam.zoom.lerp(Vector2(1.05, 1.05), delta * 2.0)
+                _update_rivals(delta)
+                return
+
+        if autotest:
+                _run_autotest(delta)
+
+        _derive_steer()
+        _update_player(delta)
+        _update_rivals(delta)
+        _update_traffic(delta)
+        _update_hud(delta)
+        _update_camera(delta)
+        _update_brain_anchor()
+
+        if shake > 0.0:
+                shake = maxf(0.0, shake - delta * 26.0)
+                cam.offset = Vector2(randf_range(-shake, shake), randf_range(-shake, shake))
+        else:
+                cam.offset = Vector2.ZERO
+
+# ─────────────────────────── فیزیک بازیکن ───────────────────────────
+func _update_player(delta: float) -> void:
+        if racing_over:
+                # بعد خط پایان — ماشین آروم می‌ایستد، دنیا زنده می‌ماند
+                vel *= exp(-1.6 * delta)
+                car_pos += vel * delta
+                car.position = car_pos
+                AudioMgr.stop_driving_loops()
+                return
+
+        var fwd := Vector2.RIGHT.rotated(heading)
+        var vf := vel.dot(fwd)
+        var vl := vel - fwd * vf
+
+        # فرمان
+        var steer := 0.0
+        if steer_left:
+                steer -= 1.0
+        if steer_right:
+                steer += 1.0
+        var sn := clampf(vf / max_s, -1.0, 1.0)
+
+        # دریفت: ترمز + فرمان در سرعت، یا پیچ تند نزدیک سرعت ماکزیمم
+        var want_drift := (brake_held and absf(vf) > 250.0 and absf(steer) > 0.2) \
+                or (absf(steer) > 0.85 and absf(vf) > 0.78 * max_s)
+        if want_drift != drifting:
+                drifting = want_drift
+                if drifting:
+                        AudioMgr.set_skid(true, 0.7)
+
+        # نیترو — با پانچ لحظه‌ای (حس تزریق)
+        nitro_on = nitro_held and nitro_meter > 0.02 and not brake_held
+        if nitro_on and not _nitro_was:
+                vel += fwd * 135.0
+                shake = maxf(shake, 1.4)
+        _nitro_was = nitro_on
+        if nitro_on:
+                nitro_meter = maxf(0.0, nitro_meter - nitro_drain * delta)
+                if not lines.visible:
+                        AudioMgr.play_sfx("nitro")
+        else:
+                nitro_meter = minf(1.0, nitro_meter + delta * (0.10 if drifting else 0.012))
+
+        # شتاب خودکار (کلاچی: گاز خودشه) — ترمز کاربر برنده است
+        var target := max_s * (NITRO_MULT if nitro_on else 1.0)
+        if brake_held and not drifting:
+                vf = move_toward(vf, 0.0, BRK * delta)
+        else:
+                var acc := ACC * (2.2 if nitro_on else 1.0)
+                vf = move_toward(vf, target, acc * delta)
+
+        # آفساید — چمن/بلوک شهری کند می‌کند
+        var nr := _nearest(car_pos)
+        offroad = nr["dist"] > ROAD_W * 0.5 - 6.0
+        var near_road: bool = nr["dist"] < ROAD_W * 0.5 + 60.0
+        if offroad:
+                vf *= exp(-1.9 * delta)
+                shake = maxf(shake, 1.6)
+
+        # چرخش — سرعت‌محور؛ در دریفت فرمان بازتر
+        var turn := TURN_RATE * sn * (1.35 if drifting else 1.0)
+        heading += steer * turn * delta
+
+        # گریپ جانبی — قلب دریفت (ارتقای لاستیک = گریپ بیشتر)
+        var grip := DRIFT_GRIP if drifting else grip_norm
+        vl *= exp(-grip * delta)
+        vel = fwd * vf + vl
+        car_pos += vel * delta
+
+        # برخورد با ساختمان‌ها
+        _resolve_buildings()
+
+        # محدوده دنیا
+        var clamped := Vector2(
+                clampf(car_pos.x, WORLD_MIN.x, WORLD_MAX.x),
+                clampf(car_pos.y, WORLD_MIN.y, WORLD_MAX.y))
+        if clamped != car_pos:
+                car_pos = clamped
+                vel *= 0.5
+
+        # برخورد با ترافیک و رقیب‌ها
+        _car_contacts(delta)
+
+        # مسافت روی پیست + دور — فقط نزدیک جاده حساب می‌شود (ضد پرش کاذب)
+        var new_s: float = nr["s"]
+        var prev := path_s
+        path_s = new_s
+        if near_road:
+                if prev > track_len * 0.85 and path_s < track_len * 0.15 and vf > 0.0:
+                        lap += 1
+                        if lap < laps:
+                                AudioMgr.play_sfx("lap")
+                        else:
+                                _cross_finish()
+                elif prev < track_len * 0.15 and path_s > track_len * 0.85 and vf < 0.0:
+                        lap -= 1
+
+        # رد لاستیک + دود دریفت
+        if drifting and absf(vf) > 120.0:
+                _mark_t -= delta
+                if _mark_t <= 0.0:
+                        _mark_t = 0.024
+                        var back := car_pos - fwd * 80.0
+                        var nrm := Vector2(-fwd.y, fwd.x)
+                        marks.add(back + nrm * 26.0, heading)
+                        marks.add(back - nrm * 26.0, heading)
+        if smoke != null:
+                smoke.emitting = drifting and absf(vf) > 140.0
+        # جیغ لاستیک متناسب با لغزش
+        var slip := (DRIFT_GRIP if drifting else grip_norm)
+        var skid_amt := clampf(1.0 - (grip / grip_norm) + (vl.length() / 240.0), 0.0, 1.0)
+        AudioMgr.set_skid(drifting and absf(vf) > 100.0, skid_amt)
+
+        # گیربکس مجازی — دور موتور اره‌ای: بالا می‌رود، دنده عوض می‌شود، می‌افتد
+        var sn2 := clampf(absf(vf) / max_s, 0.0, 1.04)
+        var g := 1
+        while g < GEARS.size() and sn2 > GEARS[g]:
+                g += 1
+        var lo := float(GEARS[g - 1])
+        var hi := float(GEARS[g])
+        var rt := clampf((sn2 - lo) / maxf(0.02, hi - lo), 0.0, 1.0)
+        rt = 0.16 + 0.84 * rt
+        if nitro_on:
+                rt = minf(1.0, rt + 0.12)
+        rpm_s = lerpf(rpm_s, rt, minf(1.0, delta * 11.0))
+        if g != gear:
+                if g > gear and sn2 > 0.06 and _shift_cd <= 0.0:
+                        AudioMgr.play_sfx("shift", -11.0)
+                        _shift_cd = 0.22
+                gear = g
+        _shift_cd = maxf(0.0, _shift_cd - delta)
+        AudioMgr.set_engine_ex(true, rpm_s, 0.25 if brake_held else 1.0, nitro_on)
+        AudioMgr.set_wind(clampf(sn2 * 1.08, 0.0, 1.0))
+        if flame != null:
+                flame.emitting = nitro_on
+        if lines != null:
+                lines.visible = nitro_on
+        if puff != null:
+                puff.emitting = absf(vf) < 95.0
+        if brake_glow != null:
+                var btgt := 0.85 if (brake_held or (drifting and absf(vf) > 190.0)) else 0.1
+                brake_glow.modulate.a = lerpf(brake_glow.modulate.a, btgt, minf(1.0, delta * 10.0))
+
+        # اعمال به نود
+        car.position = car_pos
+        car.rotation = heading
+        # لِن ضربه‌ای
+        if elapsed < invuln_until:
+                car_sprite.modulate = Color(1.0, 0.6, 0.55, 0.9)
+        else:
+                car_sprite.modulate = Color(1, 1, 1)
+
+func _spawn_sparks(p: Vector2, n: int = 15) -> void:
+        var sp := CPUParticles2D.new()
+        sp.position = p
+        sp.amount = n
+        sp.lifetime = 0.5
+        sp.one_shot = true
+        sp.explosiveness = 1.0
+        sp.direction = Vector2.UP
+        sp.spread = 180.0
+        sp.gravity = Vector2(0, 950)
+        sp.initial_velocity_min = 170.0
+        sp.initial_velocity_max = 430.0
+        sp.scale_amount_min = 1.6
+        sp.scale_amount_max = 3.4
+        var sg := Gradient.new()
+        sg.offsets = PackedFloat32Array([0.0, 0.7, 1.0])
+        sg.colors = PackedColorArray([Color(1.0, 0.92, 0.6), Color(1.0, 0.55, 0.2), Color(0.8, 0.2, 0.05, 0.0)])
+        sp.color_ramp = sg
+        world.add_child(sp)
+        sp.emitting = true
+        get_tree().create_timer(1.3).timeout.connect(sp.queue_free)
+
+func _resolve_buildings() -> void:
+        for b in buildings:
+                var sz: Vector2 = b["size"]
+                var loc: Vector2 = (car_pos - b["pos"]).rotated(-float(b["rot"]))
+                var hx := sz.x * 0.5 + 20.0
+                var hy := sz.y * 0.5 + 20.0
+                if absf(loc.x) < hx and absf(loc.y) < hy:
+                        var px := hx - absf(loc.x)
+                        var py := hy - absf(loc.y)
+                        var push := Vector2.ZERO
+                        if px < py:
+                                push = Vector2(signf(loc.x) * px, 0)
+                        else:
+                                push = Vector2(0, signf(loc.y) * py)
+                        car_pos += push.rotated(float(b["rot"]))
+                        if elapsed > bump_cd:
+                                bump_cd = elapsed + 0.5
+                                vel *= 0.42
+                                shake = 7.0
+                                AudioMgr.play_sfx("crash")
+                                _spawn_sparks(car_pos - vel.normalized() * 34.0 if vel.length() > 20.0 else car_pos, 16)
+        # موانع استاتیک — درخت/تیر چراغ/ماشین پارک‌شده (برخورد دایره‌ای نرم)
+        for so in solids:
+                var dv: Vector2 = car_pos - so["pos"]
+                var d := dv.length()
+                var rr: float = float(so["r"]) + 24.0
+                if d < rr and d > 0.01:
+                        car_pos += dv.normalized() * (rr - d)
+                        if elapsed > bump_cd:
+                                bump_cd = elapsed + 0.5
+                                vel *= 0.55
+                                shake = maxf(shake, 4.0)
+                                AudioMgr.play_sfx("clank")
+                                _spawn_sparks(so["pos"] + dv.normalized() * float(so["r"]), 8)
+
+func _car_contacts(_delta: float) -> void:
+        for R in rivals:
+                var rp: Vector2 = R["node"].position
+                var d := car_pos.distance_to(rp)
+                if d < 76.0 and d > 0.01:
+                        var push := (car_pos - rp).normalized() * (76.0 - d) * 0.6
+                        car_pos += push
+                        vel *= 0.985
+        for i in traffic.size():
+                var T = traffic[i]
+                var tp: Vector2 = T["node"].position
+                if car_pos.distance_to(tp) < 74.0 and elapsed > invuln_until:
+                        invuln_until = elapsed + 1.1
+                        vel *= 0.34
+                        shake = 10.0
+                        AudioMgr.play_sfx("crash")
+                        _spawn_sparks((car_pos + tp) * 0.5, 18)
+                        T["spd"] *= 0.4
+                        T["lane"] += (30.0 if T["lane"] > 0 else -30.0)
+
+func _cross_finish() -> void:
+        if racing_over:
+                return
+        racing_over = true
+        finish_rank = _calc_rank()
+        if not ended:
+                ended = true
+                var race_time := maxf(0.0, elapsed - 2.6)
+                var stars := Globals.set_result(int(lv["id"]), finish_rank, race_time)
+                var win := finish_rank <= 3
+                if win:
+                        AudioMgr.play_sfx("win")
+                else:
+                        AudioMgr.play_sfx("fail")
+                _celebrate(win)
+                var w := win
+                var s := stars
+                get_tree().create_timer(2.6).timeout.connect(func(): _show_end(w, s))
+
+func _calc_rank() -> int:
+        var my_prog := float(lap) * track_len + path_s
+        var rank := 1
+        for R in rivals:
+                if float(R["s"]) > my_prog:
+                        rank += 1
+        return rank
+
+# ─────────────────────────── رقیب‌ها ───────────────────────────
+func _update_rivals(delta: float) -> void:
+        var racing := not racing_over and intro <= 0.0
+        for R in rivals:
+                var s: float = R["s"]
+                if racing:
+                        # سرعت پایه + کش‌وسان: عقب بماند جانی می‌گیرد
+                        var base := max_s * float(R["pace"])
+                        var my_prog := float(lap) * track_len + path_s
+                        var gap := my_prog - s
+                        if gap > 600.0:
+                                base *= 1.15
+                        elif gap < -500.0:
+                                base *= 0.9
+                        # پیچ — از قبل کند می‌کند
+                        var d1 := _path_dir(s + 90.0)
+                        var d2 := _path_dir(s + 300.0)
+                        var ang := absf(d1.angle_to(d2))
+                        var cs := 1.0 - clampf(ang * 0.62, 0.0, 0.44)
+                        R["corner"] = ang > 0.3
+                        R["dec"] = cs < 0.82
+                        R["spd"] = lerpf(float(R["spd"]), base * cs, delta * 2.0)
+                        s += float(R["spd"]) * delta
+                        R["s"] = s
+                        # لاین — نرم تغییر می‌کند
+                        R["lane_cur"] = lerpf(float(R["lane_cur"]), float(R["lane"]), delta * 1.2)
+                var dd := _path_dir(s)
+                var nn := Vector2(-dd.y, dd.x)
+                var pos := _path_pos(s) + nn * float(R["lane_cur"])
+                R["node"].position = pos
+                var ta := dd.angle()
+                R["node"].rotation = lerp_angle(float(R["node"].rotation), ta, delta * 6.0)
+                R["ang"] = absf(dd.angle_to(Vector2.RIGHT.rotated(float(R["node"].rotation))))
+                # چراغ ترمز رقیب — موقع کند شدن در پیچ می‌سوزد
+                var brk: Sprite2D = R["brake"]
+                var btgt := 0.8 if (racing and bool(R["dec"])) else 0.08
+                brk.modulate.a = lerpf(brk.modulate.a, btgt, minf(1.0, delta * 9.0))
+                # رد لاستیک رقیب در پیچ تند — تایمر مستقل خودش (باگ اشتراک _mark_t)
+                if racing and bool(R["corner"]) and float(R["spd"]) > 300.0:
+                        R["mt"] = float(R["mt"]) - delta * 0.5
+                        if float(R["mt"]) <= 0.0:
+                                R["mt"] = 0.024
+                                var back := pos - dd * 74.0
+                                marks.add(back + nn * 24.0, ta)
+                                marks.add(back - nn * 24.0, ta)
+        if pos_label != null:
+                var rk := _calc_rank() if not racing_over else finish_rank
+                pos_label.text = fa(rk) + "/" + fa(rivals.size() + 1)
+        if lap_label != null:
+                var shown := mini(lap + 1, laps)
+                lap_label.text = "دور " + fa(shown) + "/" + fa(laps)
+
+# ─────────────────────────── ترافیک ───────────────────────────
+func _update_traffic(delta: float) -> void:
+        var racing := not racing_over and intro <= 0.0
+        var tmax := int(4.0 + float(lv.get("traffic", 1.0)) * 3.0)
+        _spawn_traf_t -= delta
+        if racing and _spawn_traf_t <= 0.0 and traffic.size() < tmax:
+                _spawn_traf_t = randf_range(1.1, 1.9) / maxf(0.5, float(lv.get("traffic", 1.0)))
+                var my_prog := float(lap) * track_len + path_s
+                _spawn_traffic(my_prog + randf_range(1100.0, 2400.0))
+        for i in range(traffic.size() - 1, -1, -1):
+                var T = traffic[i]
+                if racing:
+                        T["s"] += float(T["dir"]) * float(T["spd"]) * delta
+                var my_prog2 := float(lap) * track_len + path_s
+                if absf(float(T["s"]) - my_prog2) > 2800.0:
+                        T["node"].queue_free()
+                        traffic.remove_at(i)
+                        continue
+                var ss: float = fposmod(float(T["s"]), track_len)
+                var dd := _path_dir(ss) * float(T["dir"])
+                var nn := Vector2(-dd.y, dd.x)
+                T["node"].position = _path_pos(ss) + nn * float(T["lane"])
+                T["node"].rotation = dd.angle()
+
+# ─────────────────────────── HUD و دوربین ───────────────────────────
+func _update_hud(delta: float) -> void:
+        if Globals.best_time(int(lv["id"])) > 0.0:
+                best_label.text = "رکورد " + _fmt_time(Globals.best_time(int(lv["id"])))
+        else:
+                best_label.text = ""
+        time_label.text = "زمان " + _fmt_time(maxf(0.0, elapsed - 2.6))
+        var total := float(lap) * track_len + path_s
+        progress.value = 100.0 * clampf(total / (float(laps) * track_len), 0.0, 1.0)
+        nitro_bar.value = nitro_meter * 100.0
+        var vf := absf(vel.dot(Vector2.RIGHT.rotated(heading)))
+        kmh_label.text = fa(int(vf * 0.21))
+
+func _update_camera(delta: float) -> void:
+        # دوربین جلوی ماشین (سبک کلاچ): ماشین پایین کادر می‌نشیند، جاده‌ی پیش‌رو دیده می‌شود
+        var fwd := Vector2.RIGHT.rotated(heading)
+        var spd_f := clampf(vel.length() / max_s, 0.0, 1.35)
+        var lead := 165.0 + 215.0 * spd_f
+        if racing_over:
+                lead = 60.0
+        var look := car_pos + fwd * lead + vel * 0.14
+        cam.position = cam.position.lerp(look, delta * 5.0)
+        if cam.position.distance_to(look) > 520.0:
+                cam.position = look
+        var zt := 1.07 - clampf(spd_f, 0.0, 1.0) * 0.22
+        if nitro_on:
+                zt -= 0.05
+        cam.zoom = cam.zoom.lerp(Vector2(zt, zt), delta * 2.5)
+        # دوربین هرگز از لبه‌ی نقشه بیرون نمی‌رود
+        var half := Vector2(VIEW_W, VIEW_H) * 0.5 / cam.zoom
+        var lo := map_rect.position + half * 0.55
+        var hi := map_rect.end - half * 0.55
+        cam.position = Vector2(clampf(cam.position.x, lo.x, hi.x), clampf(cam.position.y, lo.y, hi.y))
+
+func _update_brain_anchor() -> void:
+        if car_anchor != null:
+                var sp: Vector2 = car.get_global_transform_with_canvas().origin
+                car_anchor.position = sp + Vector2(0.0, -120.0)
+
+# ─────────────────────────── پایان و جشن ───────────────────────────
+func _celebrate(win: bool) -> void:
+        AudioMgr.set_skid(false)
+        for i in 3:
+                var c := CPUParticles2D.new()
+                c.position = car_pos + Vector2(-200 + i * 200.0, -100.0)
+                c.emitting = false
+                c.amount = 40
+                c.lifetime = 3.0
+                c.direction = Vector2(0, 1)
+                c.spread = 50.0
+                c.gravity = Vector2(0, 260)
+                c.initial_velocity_min = 60.0
+                c.initial_velocity_max = 160.0
+                c.scale_amount_min = 5.0
+                c.scale_amount_max = 9.0
+                var g := Gradient.new()
+                g.offsets = PackedFloat32Array([0.0, 0.5, 1.0])
+                var cols: Array = [Color(1.0, 0.42, 0.16), Color(1.0, 0.85, 0.2), Color(0.25, 0.75, 0.95)]
+                g.colors = PackedColorArray([cols[i], cols[(i + 1) % 3], cols[(i + 2) % 3]])
+                c.color_ramp = g
+                c.z_index = 8
+                world.add_child(c)
+                c.emitting = win
+        if brain != null and car_anchor != null:
+                var my_id := str(Globals.CARS[Globals.selected_car]["id"])
+                brain.say(car_anchor, my_id, "win" if win else "lose")
+                # حباب شخصیت نباید روی پنل پایان بیفتد — بالا-وسط و عمر کوتاه
+                await get_tree().process_frame
+                if brain.bubble != null and is_instance_valid(brain.bubble):
+                        brain.bubble.position = Vector2((VIEW_W - brain.bubble.size.x) * 0.5, 92.0)
+                        get_tree().create_timer(2.1).timeout.connect(func():
+                                if brain.bubble != null and is_instance_valid(brain.bubble):
+                                        brain.bubble.queue_free()
+                                        brain.bubble = null)
+
+func _show_end(win: bool, stars: int) -> void:
+        end_panel = PanelContainer.new()
+        end_panel.add_theme_stylebox_override("panel", _sb(Color(0.11, 0.12, 0.17), Color(0.85, 0.68, 0.28, 0.6), 24, 3))
+        var vb := VBoxContainer.new()
+        vb.add_theme_constant_override("separation", 10)
+        end_panel.add_child(vb)
+        end_title = Label.new()
+        var tmap := ["قهرمان خیابان!", "دوم شدی!", "سوم شدی!", "باختی!"]
+        end_title.text = str(tmap[clampi(finish_rank - 1, 0, 3)])
+        end_title.add_theme_font_override("font", load("res://assets/fonts/Vazirmatn-Bold.ttf"))
+        end_title.add_theme_color_override("font_color", Color(0.98, 0.85, 0.3) if win else Color(0.95, 0.45, 0.35))
+        end_title.add_theme_font_size_override("font_size", 42)
+        end_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+        vb.add_child(end_title)
+        end_stars = Label.new()
+        end_stars.text = ("٭٭٭".substr(0, stars) + "···".substr(0, 3 - stars)) if stars > 0 else "---"
+        end_stars.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+        end_stars.add_theme_font_size_override("font_size", 44)
+        end_stars.add_theme_color_override("font_color", Color(0.95, 0.78, 0.2))
+        vb.add_child(end_stars)
+        end_reward = Label.new()
+        var rt := maxf(0.0, elapsed - 2.6)
+        var bt := Globals.best_time(int(lv["id"]))
+        end_reward.text = "جایگاه " + fa(finish_rank) + "/" + fa(rivals.size() + 1) + "  •  زمان " + _fmt_time(rt)
+        if bt > 0.0:
+                end_reward.text += "  •  رکورد " + _fmt_time(bt)
+        end_reward.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+        end_reward.add_theme_font_size_override("font_size", 26)
+        end_reward.add_theme_color_override("font_color", Color(0.85, 0.85, 0.9))
+        vb.add_child(end_reward)
+        var hb := HBoxContainer.new()
+        hb.alignment = BoxContainer.ALIGNMENT_CENTER
+        hb.add_theme_constant_override("separation", 14)
+        end_retry_btn = Button.new()
+        end_retry_btn.text = Globals.L("retry")
+        end_retry_btn.add_theme_font_override("font", load("res://assets/fonts/Vazirmatn-Bold.ttf"))
+        end_retry_btn.pressed.connect(func(): get_tree().change_scene_to_file("res://scenes/game.tscn"))
+        _style_btn(end_retry_btn, true)
+        hb.add_child(end_retry_btn)
+        if win and int(lv["id"]) < Globals.LEVELS.size():
+                var b_next := Button.new()
+                b_next.text = Globals.L("next")
+                b_next.add_theme_font_override("font", load("res://assets/fonts/Vazirmatn-Bold.ttf"))
+                b_next.pressed.connect(func():
+                        Globals.set_meta("start_level", int(lv["id"]) + 1)
+                        get_tree().change_scene_to_file("res://scenes/game.tscn"))
+                _style_btn(b_next, true)
+                hb.add_child(b_next)
+        var b_menu := Button.new()
+        b_menu.text = Globals.L("menu")
+        b_menu.add_theme_font_override("font", load("res://assets/fonts/Vazirmatn-Bold.ttf"))
+        b_menu.pressed.connect(func(): get_tree().change_scene_to_file("res://scenes/menu.tscn"))
+        _style_btn(b_menu, false)
+        hb.add_child(b_menu)
+        end_menu_btn = b_menu
+        vb.add_child(hb)
+        hud.add_child(end_panel)
+        _place(end_panel, 0.5, 0.5, 0.5, 0.5, -290, -175, 290, 135)
+        end_panel.custom_minimum_size = Vector2(580, 310)
+        end_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+        end_panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+
+func _exit_tree() -> void:
+        AudioMgr.set_engine(false)
+        AudioMgr.set_skid(false)
+
+# ─────────────────────────── تست خودکار ───────────────────────────
+func _run_autotest(delta: float) -> void:
+        _auto_timer += delta
+        match _at_stage:
+                0:
+                        if _auto_timer > 0.6:
+                                _at_stage = 1
+                                _at_heading0 = heading
+                                _press_at(Vector2(VIEW_W * 0.85, VIEW_H * 0.72)) # زون فرمان راست — نگه‌داشته
+                1:
+                        if _auto_timer > 0.75:
+                                _at_stage = 2
+                                _release_at(Vector2(VIEW_W * 0.85, VIEW_H * 0.72))
+                                _press_at(Vector2(VIEW_W * 0.15, VIEW_H * 0.72)) # خنثی‌سازی — برگرد مسیر
+                                var turned := absf(angle_difference(_at_heading0, heading))
+                                print("[boghi][autotest] STEER-RIGHT ", "OK" if turned > 0.08 else "FAIL turned=" + str(turned))
+                                # شهر جدید چگال است — بعد از تست فرمان، ماشین وسط مسیر قرار می‌گیرد
+                                # تا نیترو/دریفت واقعاً تست شوند، نه برخورد با ساختمان
+                                var rs := path_s + 60.0
+                                car_pos = _path_pos(rs)
+                                heading = _path_dir(rs).angle()
+                                vel = _path_dir(rs) * max_s * 0.85
+                                path_s = rs
+                                if turned <= 0.08:
+                                        get_tree().quit(1)
+                2:
+                        if _auto_timer > 0.9:
+                                _at_stage = 3
+                                _release_at(Vector2(VIEW_W * 0.15, VIEW_H * 0.72))
+                                _press_at(Vector2(VIEW_W - 380.0, VIEW_H - 120.0)) # دکمه نیترو
+                3:
+                        if _auto_timer > 1.9:
+                                _at_stage = 4
+                                _release_at(Vector2(VIEW_W - 380.0, VIEW_H - 120.0))
+                                print("[boghi][autotest] NITRO ", "OK" if nitro_meter < 0.98 else "FAIL")
+                                if nitro_meter >= 0.98:
+                                        get_tree().quit(1)
+                4:
+                        # تست دریفت: ترمز + فرمان راست در سرعت → لغزش + جیغ لاستیک
+                        if _auto_timer > 2.4 and _at_stage == 4:
+                                _at_stage = 7
+                                # دنیا زنده است (ترافیک/پیچ) — ماشین دوباره تازه وسط مسیر سریع می‌شود
+                                var rs2 := path_s + 40.0
+                                car_pos = _path_pos(rs2)
+                                heading = _path_dir(rs2).angle()
+                                vel = _path_dir(rs2) * max_s * 0.95
+                                path_s = rs2
+                                _press_at(Vector2(380.0, VIEW_H - 120.0)) # ترمز
+                                _press_at(Vector2(VIEW_W * 0.85, VIEW_H * 0.72)) # فرمان راست
+                                _drift_seen = false
+                7:
+                        if drifting:
+                                _drift_seen = true
+                        if _auto_timer > 3.4:
+                                _at_stage = 8
+                                _release_at(Vector2(380.0, VIEW_H - 120.0))
+                                _release_at(Vector2(VIEW_W * 0.85, VIEW_H * 0.72))
+                                print("[boghi][autotest] DRIFT ", "OK" if _drift_seen else "FAIL")
+                8:
+                        if _auto_timer > 6.0:
+                                var nr: Dictionary = _nearest(car_pos)
+                                var img := get_viewport().get_texture().get_image()
+                                if img != null:
+                                        img.save_png("/home/z/my-project/scripts/shot_game.png")
+                                print("AUTOTEST OK lap=", lap, " pos=", car_pos.round(), " spd=", int(vel.length()), " off=", nr["dist"] < ROAD_W * 0.5, " rank=", _calc_rank(), " rivals=", rivals.size(), " traf=", traffic.size(), " bld=", buildings.size(), " lamps=", 0, " nearest=", int(nr["dist"]))
+                                get_tree().quit()
+
+func _press_at(pos: Vector2) -> void:
+        var ev := InputEventMouseButton.new()
+        ev.button_index = MOUSE_BUTTON_LEFT
+        ev.pressed = true
+        ev.button_mask = MOUSE_BUTTON_MASK_LEFT
+        ev.position = pos
+        ev.global_position = pos
+        Input.parse_input_event(ev)
+
+func _release_at(pos: Vector2) -> void:
+        var ev := InputEventMouseButton.new()
+        ev.button_index = MOUSE_BUTTON_LEFT
+        ev.pressed = false
+        ev.position = pos
+        ev.global_position = pos
+        Input.parse_input_event(ev)
+
+func _tap(btn: Button) -> void:
+        print("[autotest] tap-btn: ", btn.text, " rect=", btn.get_global_rect())
+        _press_at(btn.get_global_rect().get_center())
+        _release_at(btn.get_global_rect().get_center())
+
+func _tap_at(pos: Vector2) -> void:
+        _press_at(pos)
+        _release_at(pos)
+
+## تست چرخه کامل: توقف → ادامه → خط پایان سریع → پنل → دوباره → منو
+func _autotest_full() -> void:
+        await get_tree().create_timer(2.8).timeout # بعد از ۳-۲-۱-برو
+        _tap(pause_btn)
+        await get_tree().create_timer(0.3).timeout
+        var p1: bool = get_tree().paused
+        _tap(pause_btn)
+        await get_tree().create_timer(0.3).timeout
+        var p2: bool = get_tree().paused
+        print("[boghi][autotest] TAP-PAUSE ", "OK" if (p1 and not p2) else "FAIL")
+        if not (p1 and not p2):
+                get_tree().quit(1)
+                return
+        # پرش به انتهای دور آخر — با اتوفرمان تا خط پایان (هر پیستی جواب می‌دهد)
+        lap = laps - 1
+        path_s = track_len - 900.0
+        car_pos = _path_pos(path_s)
+        heading = _path_dir(path_s).angle()
+        vel = _path_dir(path_s) * max_s * 0.8
+        var guard := 0.0
+        while not racing_over and guard < 9.0:
+                await get_tree().process_frame
+                guard += get_process_delta_time()
+                var ahead := 320.0 + vel.length() * 0.5
+                var tgt2 := _path_pos(path_s + ahead)
+                var want := (tgt2 - car_pos).angle()
+                var diff := angle_difference(heading, want)
+                kb_left = diff < -0.03
+                kb_right = diff > 0.03
+        kb_left = false
+        kb_right = false
+        await get_tree().create_timer(1.6).timeout
+        var nd1: Dictionary = _nearest(car_pos)
+        print("[boghi][autotest] diag1 pos=", car_pos.round(), " s=", int(path_s), " lap=", lap, " vel=", int(vel.length()), " dist=", int(nd1["dist"]), " over=", racing_over)
+        for b in buildings:
+                var loc: Vector2 = (car_pos - b["pos"]).rotated(-float(b["rot"]))
+                var hx: float = b["size"].x * 0.5 + 20.0
+                var hy: float = b["size"].y * 0.5 + 20.0
+                if absf(loc.x) < hx + 40.0 and absf(loc.y) < hy + 40.0:
+                        print("[diag] bld: pos=", b["pos"].round(), " sz=", b["size"].round(), " loc=", loc.round())
+        for so2 in solids:
+                if car_pos.distance_to(so2["pos"]) < 140.0:
+                        print("[diag] solid: ", so2["pos"].round(), " r=", so2["r"], " d=", int(car_pos.distance_to(so2["pos"])))
+        await get_tree().create_timer(3.8).timeout
+        var nd2: Dictionary = _nearest(car_pos)
+        print("[boghi][autotest] diag2 pos=", car_pos.round(), " s=", int(path_s), " lap=", lap, " vel=", int(vel.length()), " dist=", int(nd2["dist"]), " over=", racing_over)
+        if end_panel == null or end_retry_btn == null or end_menu_btn == null:
+                print("[boghi][autotest] END-PANEL FAIL")
+                get_tree().quit(1)
+                return
+        print("[boghi][autotest] END-PANEL OK")
+        var img := get_viewport().get_texture().get_image()
+        if img != null:
+                img.save_png("/home/z/my-project/scripts/shot_end_panel.png")
+        if not Globals.has_meta("at_retry"):
+                Globals.set_meta("at_retry", 1)
+                end_retry_btn.pressed.emit()
+                return # صحنه دوباره لود می‌شود؛ نسخه جدید ادامه می‌دهد
+        var tree := get_tree()
+        Globals.set_meta("at_menu_return", true)
+        end_menu_btn.pressed.emit() # تعویض صحنه — بعد از این به self دست نزن
+        # چک برگشت به منو — تایمر درختی تا با آزادشدن صحنه نمریم
+        tree.create_timer(3.5).timeout.connect(func():
+                if tree.current_scene != null and tree.current_scene.scene_file_path.ends_with("menu.tscn"):
+                        print("[boghi][autotest] ENDMENU-RETURN OK")
+                else:
+                        print("[boghi][autotest] ENDMENU-RETURN FAIL")
+                tree.quit())
+
+## پلی‌تست کامل — اتوپایلوت مسیر را دور می‌زند؛ شات در همه‌ی مراحل
+func _run_playtest() -> void:
+        var dir_exec := get_viewport()
+        await get_tree().create_timer(0.4).timeout
+        _save_shot("pt_1_countdown.png")
+        await get_tree().create_timer(2.7).timeout
+        print("[playtest] GO — رانندگی شروع")
+        var t0 := Time.get_ticks_msec()
+        var top_spd := 0.0
+        var shots_done := {}
+        var plan := {6.0: "pt_2_start.png", 14.0: "pt_3_straight.png", 22.0: "pt_4_corner.png",
+                34.0: "pt_5_midrace.png", 46.0: "pt_6_traffic.png", 58.0: "pt_7_final.png"}
+        while not racing_over and ended == false:
+                await get_tree().process_frame
+                var el := (Time.get_ticks_msec() - t0) / 1000.0
+                # — راننده: نگاه به نقطه‌ی پیش‌رو
+                var ahead := 300.0 + vel.length() * 0.45
+                var tgt := _path_pos(path_s + ahead)
+                var d := _path_dir(path_s + ahead)
+                var nn := Vector2(-d.y, d.x)
+                tgt += nn * 30.0
+                var want := (tgt - car_pos).angle()
+                var diff := angle_difference(heading, want)
+                kb_left = diff < -0.03
+                kb_right = diff > 0.03
+                var d2 := _path_dir(path_s + 700.0)
+                var curve := absf(d.angle_to(d2))
+                nitro_held = curve < 0.06 and nitro_meter > 0.5
+                brake_held = curve > 0.5 and vel.length() > max_s * 0.75
+                top_spd = maxf(top_spd, vel.length())
+                for k in plan:
+                        if el > float(k) and not shots_done.has(k):
+                                shots_done[k] = true
+                                _save_shot(plan[k])
+                                print("[playtest] shot ", plan[k], " t=", int(el), " spd=", int(vel.length()), " lap=", lap + 1, " rank=", _calc_rank())
+                if el > 220.0:
+                        break
+        var total := (Time.get_ticks_msec() - t0) / 1000.0
+        print("[playtest] FINISH rank=", finish_rank, " time=", int(total), "s top=", int(top_spd * 0.21), "kmh")
+        await get_tree().create_timer(2.9).timeout
+        _save_shot("pt_8_result.png")
+        print("[playtest] DONE")
+        get_tree().quit()
+
+# ─────────────────────────── شات‌های بصری (--shots) ───────────────────────────
+func _save_shot(fname: String) -> void:
+        var img := get_viewport().get_texture().get_image()
+        if img != null:
+                img.save_png("/home/z/my-project/scripts/" + fname)
+                print("[boghi][shots] saved ", fname)
+
+## خط زمانی شات: شمارش معکوس → نیترو → دریفت → خیابان با ترافیک و رقیب
+func _run_shots() -> void:
+        await get_tree().create_timer(0.25).timeout
+        print("[shots] cd: text=", intro_label.text, " vis=", intro_label.visible, " a=", intro_label.modulate.a, " stage=", _intro_stage, " intro=", intro)
+        _save_shot("shot_race_countdown.png")
+        await get_tree().create_timer(2.6).timeout # بعد از «برو!»
+        nitro_meter = 1.0
+        nitro_held = true
+        await get_tree().create_timer(1.35).timeout
+        _save_shot("shot_race_nitro.png")
+        nitro_held = false
+        _press_at(Vector2(380.0, VIEW_H - 120.0)) # ترمز + فرمان راست = دریفت واقعی
+        _press_at(Vector2(VIEW_W * 0.85, VIEW_H * 0.72))
+        await get_tree().create_timer(0.85).timeout
+        _save_shot("shot_race_drift.png")
+        _release_at(Vector2(380.0, VIEW_H - 120.0))
+        _release_at(Vector2(VIEW_W * 0.85, VIEW_H * 0.72))
+        # برگشت بازیکن به مسیر — شات خیابان باید تمیز باشد
+        await get_tree().create_timer(0.3).timeout
+        path_s += 640.0
+        car_pos = _path_pos(path_s)
+        heading = _path_dir(path_s).angle()
+        vel = _path_dir(path_s) * max_s * 0.9
+        var my := float(lap) * track_len + path_s
+        _spawn_traffic(my + 700.0)
+        _spawn_traffic(my + 940.0)
+        await get_tree().create_timer(1.5).timeout
+        _save_shot("shot_race_street.png")
+        print("[boghi][shots] OK")
+        get_tree().quit()
+
+# ─────────────────────────── ابزار ───────────────────────────
+func fa(n: int) -> String:
+        var s := str(n)
+        var out := ""
+        for ch in s:
+                if ch >= "0" and ch <= "9":
+                        out += FA_D[int(ch)]
+                else:
+                        out += ch
+        return out

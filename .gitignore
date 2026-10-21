@@ -1,0 +1,8 @@
+.godot/
+android/build/
+android/.gradle/
+.gradle/
+export_credentials.cfg
+*.tmp
+build/
+android/
