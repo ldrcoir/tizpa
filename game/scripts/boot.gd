@@ -76,6 +76,10 @@ func _go_menu() -> void:
         # مسیر مستقیم برای تست/دمو: --story یا --storytest → هاب زندگی محله
         # --autotest-full → مستقیم مسابقه (چرخه کامل: بازی→پایان→دوباره→منو)
         var uargs := OS.get_cmdline_user_args()
+        # --level=N → ورود مستقیم به مرحله N (تست سلامت همه‌ی پیست‌ها)
+        for ua in uargs:
+                if ua.begins_with("--level="):
+                        Globals.set_meta("start_level", int(ua.split("=")[1]))
         var scene_path := "res://scenes/menu.tscn"
         if uargs.has("--autotest-full") or uargs.has("--shots") or uargs.has("--playtest"):
                 scene_path = "res://scenes/game.tscn"
