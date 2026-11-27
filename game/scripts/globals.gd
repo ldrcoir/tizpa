@@ -5,8 +5,8 @@ extends Node
 const SAVE_PATH := "user://tizpa_save.json"
 
 # نسخه بازی — منو/بوت از همین می‌خوانند (دست‌نویس ممنوع)
-const VERSION := "1.0"
-const BUILD := 1
+const VERSION := "1.1"
+const BUILD := 2
 
 # ─────────────── ۵ مرحله — متنوع در فرم/زمان روز/چالش ───────────────
 const LEVELS := [
