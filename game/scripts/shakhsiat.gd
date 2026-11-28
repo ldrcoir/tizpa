@@ -1,4 +1,4 @@
-class_name CarBrain
+class_name Shakhsiat
 extends Node
 ## مغز بوقی — موتور شخصیت محلی ماشین‌ها (کاملاً آفلاین، داخل خود بازی)
 ## هر ماشین شخصیت و صدای مخصوص خودش را دارد؛ صداها همان لحظه ساخته می‌شوند
@@ -11,11 +11,11 @@ const COL_TXT := Color(0.22, 0.14, 0.07)
 
 # صدای هر ماشین: pitch=زیر و بمی، tone=جیغی/بمی بودن رگه صدا، rate=سرعت هجا
 # صداها لاله‌زبانِ ماشین‌هاست — مثل انیمیشن‌های معروف ماشین‌ها هر کدام لهجه خودشان را دارند
-const PERSONAS := {
+const SHAKHSIATHA := {
         "helia": {
-                "nick": "هلیا",
-                "voice": {"pitch": 235.0, "tone": 0.62, "rate": 10.5, "jit": 0.12},
-                "lines": {
+                "lakeb": "هلیا",
+                "sedasar": {"zomz": 235.0, "javse": 0.62, "nerkh": 10.5, "larz": 0.12},
+                "harfha": {
                         "idle": ["آماده‌ای؟ ما می‌بریم.", "خیابان‌های تهران امشب بیدارند.", "چرخ جلو رو نگه دار، بقیه‌ش با من."],
                         "select": ["هلیا در مسیره.", "کمربند ببند."],
                         "buy": [],
@@ -30,9 +30,9 @@ const PERSONAS := {
                 },
         },
         "boghi": {
-                "nick": "بوقیِ شیطون",
-                "voice": {"pitch": 330.0, "tone": 0.75, "rate": 11.0, "jit": 0.18},
-                "lines": {
+                "lakeb": "بوقیِ شیطون",
+                "sedasar": {"zomz": 330.0, "javse": 0.75, "nerkh": 11.0, "larz": 0.18},
+                "harfha": {
                         "idle": ["منو انتخاب کن! قول می‌دم بترکونیم!", "هی! یه مسابقه‌ی کوچولو داریم؟", "بوق بزن تا همه بدونن کی خوشگله‌!", "چهارچرخمو دیدی؟ براقه، نه؟"],
                         "select": ["آره! بالاخره فهمیدی من بهترینم!", "بوقی تو راهه، جا خالی کن!"],
                         "buy": [],
@@ -47,9 +47,9 @@ const PERSONAS := {
                 },
         },
         "boghi_yellow": {
-                "nick": "بوقیِ آفتابی",
-                "voice": {"pitch": 355.0, "tone": 0.65, "rate": 11.5, "jit": 0.16},
-                "lines": {
+                "lakeb": "بوقیِ آفتابی",
+                "sedasar": {"zomz": 355.0, "javse": 0.65, "nerkh": 11.5, "larz": 0.16},
+                "harfha": {
                         "idle": ["آفتاب که می‌زنه، من راه می‌افتم!", "داداش بوقیم — ولی زردِ آفتاب‌خورده!", "زردم چون سریع‌ترینم!"],
                         "select": ["با آفتابِ محل رفاقت کن!", "یزرد! بریم که دنیا بچرخه!"],
                         "buy": ["خریدی منو؟ بهترین انتخاب عمرت!"],
@@ -63,9 +63,9 @@ const PERSONAS := {
                 },
         },
         "tiba": {
-                "nick": "تیبای چابک",
-                "voice": {"pitch": 440.0, "tone": 0.55, "rate": 13.0, "jit": 0.2},
-                "lines": {
+                "lakeb": "تیبای چابک",
+                "sedasar": {"zomz": 440.0, "javse": 0.55, "nerkh": 13.0, "larz": 0.2},
+                "harfha": {
                         "idle": ["سبکم مثل پر کبوتر!", "پرش‌های دقیق کار منمه!", "یه دور بزنیم؟ من تمیز می‌پرم!"],
                         "select": ["تووووپ! تکون نمی‌خورم از دستت!"],
                         "buy": ["چسبیدی بهم؟ خوش اومدی!"],
@@ -79,9 +79,9 @@ const PERSONAS := {
                 },
         },
         "pride": {
-                "nick": "پرایدِ جیغ",
-                "voice": {"pitch": 400.0, "tone": 0.85, "rate": 12.0, "jit": 0.22},
-                "lines": {
+                "lakeb": "پرایدِ جیغ",
+                "sedasar": {"zomz": 400.0, "javse": 0.85, "nerkh": 12.0, "larz": 0.22},
+                "harfha": {
                         "idle": ["استریک منو دیدی؟ مسابقه‌ایم من!", "جیغ بزن تا صدا بگیره!", "قرمزم چون آتیشم!"],
                         "select": ["بخیه بزن، الان می‌پروونمت!"],
                         "buy": ["برنده شدی که منو گرفتی!"],
@@ -95,9 +95,9 @@ const PERSONAS := {
                 },
         },
         "pejo": {
-                "nick": "پژوی فرمان‌رو",
-                "voice": {"pitch": 330.0, "tone": 0.5, "rate": 10.0, "jit": 0.12},
-                "lines": {
+                "lakeb": "پژوی فرمان‌رو",
+                "sedasar": {"zomz": 330.0, "javse": 0.5, "nerkh": 10.0, "larz": 0.12},
+                "harfha": {
                         "idle": ["تعادل، رمز من است.", "نقره‌ایم چون کلاس دارم.", "فرمان دستمه، خیالت راحت."],
                         "select": ["انتخابِ یک حرفه‌ای.", "با من، خیابان مال توئه."],
                         "buy": ["سرمایه‌گذاری خوبی بود."],
@@ -111,9 +111,9 @@ const PERSONAS := {
                 },
         },
         "samand": {
-                "nick": "سمندِ پیرِ خردمند",
-                "voice": {"pitch": 200.0, "tone": 0.35, "rate": 7.0, "jit": 0.1},
-                "lines": {
+                "lakeb": "سمندِ پیرِ خردمند",
+                "sedasar": {"zomz": 200.0, "javse": 0.35, "nerkh": 7.0, "larz": 0.1},
+                "harfha": {
                         "idle": ["جوان‌مرد، من سال‌هاست این جاده‌ها را می‌بینم...", "محکم مثل کوه، آرام مثل باران.", "پشت من وایسا، هیچی اتفاق نمی‌افته."],
                         "select": ["پشت من وایسا پسرم، امن‌ترین جا دنیاست."],
                         "buy": ["خریدِ عاقلانه‌ای بود، آفرین."],
@@ -127,9 +127,9 @@ const PERSONAS := {
                 },
         },
         "dena": {
-                "nick": "دنای آرام",
-                "voice": {"pitch": 255.0, "tone": 0.45, "rate": 9.0, "jit": 0.1},
-                "lines": {
+                "lakeb": "دنای آرام",
+                "sedasar": {"zomz": 255.0, "javse": 0.45, "nerkh": 9.0, "larz": 0.1},
+                "harfha": {
                         "idle": ["شکوه، آرامش، دنا.", "جاده‌های بزرگ به سدان بزرگ نیاز دارند.", "سفیدم چون صلح‌آمیزم."],
                         "select": ["تشریف بیارید جلو، سرنشینِ محترم!"],
                         "buy": ["انتخابی باوقار بود."],
@@ -143,9 +143,9 @@ const PERSONAS := {
                 },
         },
         "nissan": {
-                "nick": "نیسانِ آسفالت‌خور",
-                "voice": {"pitch": 150.0, "tone": 0.9, "rate": 6.5, "jit": 0.08},
-                "lines": {
+                "lakeb": "نیسانِ آسفالت‌خور",
+                "sedasar": {"zomz": 150.0, "javse": 0.9, "nerkh": 6.5, "larz": 0.08},
+                "harfha": {
                         "idle": ["هوم. من وانت نیسانم. بارِ سنگین؟ بازیچه.", "قرمزم چون آجر قرمز، مثل من سخت.", "سرعتم کمه؟ کل لودری رو زمین دارم."],
                         "select": ["سوار شو. لرزیدی؟ عادیه."],
                         "buy": ["هوم. خرید خوبی بود."],
@@ -159,9 +159,9 @@ const PERSONAS := {
                 },
         },
         "pejo_race": {
-                "nick": "پژوی پیست",
-                "voice": {"pitch": 385.0, "tone": 0.8, "rate": 12.5, "jit": 0.2},
-                "lines": {
+                "lakeb": "پژوی پیست",
+                "sedasar": {"zomz": 385.0, "javse": 0.8, "nerkh": 12.5, "larz": 0.2},
+                "harfha": {
                         "idle": ["قرمز آتشین با استریک سفید — عاشق پیستم!", "کلاچ و گاز، کل زندگی من!", "پیست خونه‌ی دوممه!"],
                         "select": ["ایول! حالا یه مسابقه واقعیه!"],
                         "buy": ["به تیم مسابقه خوش اومدی!"],
@@ -175,9 +175,9 @@ const PERSONAS := {
                 },
         },
         "shahin": {
-                "nick": "شاهینِ شب",
-                "voice": {"pitch": 225.0, "tone": 0.7, "rate": 8.5, "jit": 0.12},
-                "lines": {
+                "lakeb": "شاهینِ شب",
+                "sedasar": {"zomz": 225.0, "javse": 0.7, "nerkh": 8.5, "larz": 0.12},
+                "harfha": {
                         "idle": ["شب که بشه، خیابون مال منه.", "مشکیِ طلایی‌خط — شاهِ شب‌های تهران.", "صدای منو شنیدی؟ اون بود که چراغا رو جا گذاشت."],
                         "select": ["خوبه. شب امشب جالبه."],
                         "buy": ["سلیقه داری. قبول شد."],
@@ -191,9 +191,9 @@ const PERSONAS := {
                 },
         },
         "quick": {
-                "nick": "کوییکِ جیغ‌جوان",
-                "voice": {"pitch": 470.0, "tone": 0.75, "rate": 14.0, "jit": 0.25},
-                "lines": {
+                "lakeb": "کوییکِ جیغ‌جوان",
+                "sedasar": {"zomz": 470.0, "javse": 0.75, "nerkh": 14.0, "larz": 0.25},
+                "harfha": {
                         "idle": ["نارنجیم! جیغ‌ترین رنگِ دنیا!", "پرش‌های بلند؟ تخصص منم!", "آخیش! بالاخره گشادمت!"],
                         "select": ["یِیِس! بزن بریم هوووا!"],
                         "buy": ["خریدی منو؟ بهترین کار زندگیت!"],
@@ -207,9 +207,9 @@ const PERSONAS := {
                 },
         },
         "dena_race": {
-                "nick": "دنای قهرمان",
-                "voice": {"pitch": 270.0, "tone": 0.65, "rate": 9.5, "jit": 0.14},
-                "lines": {
+                "lakeb": "دنای قهرمان",
+                "sedasar": {"zomz": 270.0, "javse": 0.65, "nerkh": 9.5, "larz": 0.14},
+                "harfha": {
                         "idle": ["سدانِ ملی با لباس استریک — غرورِ پیست!", "قهرمان‌ها آرام حرف می‌زنند، سریع می‌روند.", "سکو؟ خونه‌ی دوممه."],
                         "select": ["با من، فقط جای اول."],
                         "buy": ["به تیم قهرمان‌ها خوش آمدی."],
@@ -223,9 +223,9 @@ const PERSONAS := {
                 },
         },
         "pride_blue": {
-                "nick": "موج آبی",
-                "voice": {"pitch": 390.0, "tone": 0.8, "rate": 12.0, "jit": 0.2},
-                "lines": {
+                "lakeb": "موج آبی",
+                "sedasar": {"zomz": 390.0, "javse": 0.8, "nerkh": 12.0, "larz": 0.2},
+                "harfha": {
                         "idle": ["موج آبی پیست منم! بال بزرگم رو دیدی؟", "آبیِ اقیانوسی با استریک سفید!", "بال عقبم زمین رو نگه می‌داره، نه آدمو!"],
                         "select": ["سوار موج شو!"],
                         "buy": ["به باشگاه موج‌سوارها خوش اومدی!"],
@@ -240,9 +240,9 @@ const PERSONAS := {
                 },
         },
         "pejo_green": {
-                "nick": "زمرد پیست",
-                "voice": {"pitch": 350.0, "tone": 0.6, "rate": 11.0, "jit": 0.16},
-                "lines": {
+                "lakeb": "زمرد پیست",
+                "sedasar": {"zomz": 350.0, "javse": 0.6, "nerkh": 11.0, "larz": 0.16},
+                "harfha": {
                         "idle": ["زمردِ سبز پیست — استریک مشکی، شتاب وحشی!", "سبزم چون گازِ کوه دم می‌کشم!", "فنرم آهنیه، رگم هم!"],
                         "select": ["سبز شدی؟ یعنی رفاقتی!"],
                         "buy": ["سلیقه‌ات زرگری، انتخابت زمردی!"],
@@ -257,9 +257,9 @@ const PERSONAS := {
                 },
         },
         "shahin_white": {
-                "nick": "قهرمان سفید",
-                "voice": {"pitch": 235.0, "tone": 0.55, "rate": 9.0, "jit": 0.12},
-                "lines": {
+                "lakeb": "قهرمان سفید",
+                "sedasar": {"zomz": 235.0, "javse": 0.55, "nerkh": 9.0, "larz": 0.12},
+                "harfha": {
                         "idle": ["سفیدِ طلایی‌خط — قهرمانِ شب‌های تهران.", "نفسِ طلایی دارم؛ خط طلاییم هم همین‌طور.", "قهرمان ساکت می‌بره."],
                         "select": ["انتخابِ قهرمانانه."],
                         "buy": ["حالا تو هم تیم قهرمانی."],
@@ -274,9 +274,9 @@ const PERSONAS := {
                 },
         },
         "dena_red": {
-                "nick": "کاپیتان سرخ",
-                "voice": {"pitch": 260.0, "tone": 0.6, "rate": 9.5, "jit": 0.14},
-                "lines": {
+                "lakeb": "کاپیتان سرخ",
+                "sedasar": {"zomz": 260.0, "javse": 0.6, "nerkh": 9.5, "larz": 0.14},
+                "harfha": {
                         "idle": ["کاپیتانِ سرخ مأموریت‌ها گزارش می‌ده: آماده‌ام!", "سرخِ مأموریت، سخت‌کوش و سریع!", "دستور بده؛ مأموریت انجام می‌شه!"],
                         "select": ["کاپیتان روی سینه‌اش دوخت... تو!"],
                         "buy": ["تیم دوتایی شد!"],
@@ -291,9 +291,9 @@ const PERSONAS := {
                 },
         },
         "nissan_blue": {
-                "nick": "نیسانِ اکبر",
-                "voice": {"pitch": 145.0, "tone": 0.9, "rate": 6.0, "jit": 0.08},
-                "lines": {
+                "lakeb": "نیسانِ اکبر",
+                "sedasar": {"zomz": 145.0, "javse": 0.9, "nerkh": 6.0, "larz": 0.08},
+                "harfha": {
                         "idle": ["هوم. آبیِ اکبرم. لونگِ بابام به گردنه، آسفالت به چرخم.", "بار سنگین؟ خنده داره.", "اکبر گفت: ببرش خط پایان، برگردونش سالم."],
                         "select": ["سوار شو. اکبر خودش لاستیک‌هامو بسته."],
                         "buy": ["هوم. اکبر خوشحال می‌شه."],
@@ -308,9 +308,9 @@ const PERSONAS := {
                 },
         },
         "formula_red": {
-                "nick": "فرمول آتش",
-                "voice": {"pitch": 430.0, "tone": 0.85, "rate": 14.0, "jit": 0.22},
-                "lines": {
+                "lakeb": "فرمول آتش",
+                "sedasar": {"zomz": 430.0, "javse": 0.85, "nerkh": 14.0, "larz": 0.22},
+                "harfha": {
                         "idle": ["بال جلو! بال عقب! جون نصف!", "سرخِ توربوی پیستم — چرخام زمین رو گاز می‌کنن!", "نیم‌گرمِ موتور که شد، دیگه هیچی جلودارم نیست!"],
                         "select": ["ایول! بالاخره پیست واقعی!"],
                         "buy": ["به تیم آتش خوش اومدی!"],
@@ -325,9 +325,9 @@ const PERSONAS := {
                 },
         },
         "formula_blue": {
-                "nick": "فرمول موج",
-                "voice": {"pitch": 470.0, "tone": 0.7, "rate": 15.0, "jit": 0.24},
-                "lines": {
+                "lakeb": "فرمول موج",
+                "sedasar": {"zomz": 470.0, "javse": 0.7, "nerkh": 15.0, "larz": 0.24},
+                "harfha": {
                         "idle": ["آبیِ تازه‌کار ولی بی‌باک!", "موج‌ها می‌گن سریع‌ترینم!", "هر روز بهتر از دیروز — شعارم همینه!"],
                         "select": ["وای وای وای! بریم بریم بریم!"],
                         "buy": ["بهترین روز زندگیمه!"],
@@ -342,9 +342,9 @@ const PERSONAS := {
                 },
         },
         "formula_black": {
-                "nick": "فرمول شاهین",
-                "voice": {"pitch": 205.0, "tone": 0.6, "rate": 8.5, "jit": 0.1},
-                "lines": {
+                "lakeb": "فرمول شاهین",
+                "sedasar": {"zomz": 205.0, "javse": 0.6, "nerkh": 8.5, "larz": 0.1},
+                "harfha": {
                         "idle": ["مشکی-طلایی. شب که بشه، رکورد می‌شکنم.", "صدای موتورم رو که بشنوی، صبح رو می‌بینی.", "بالای سرت بال طلاییم رد می‌شه."],
                         "select": ["انتخابِ درست. همیشه."],
                         "buy": ["تاج سرت بذار."],
@@ -359,9 +359,9 @@ const PERSONAS := {
                 },
         },
         "akbar": {
-                "nick": "اکبر سیبیلو",
-                "voice": {"pitch": 165.0, "tone": 0.8, "rate": 8.0, "jit": 0.12},
-                "lines": {
+                "lakeb": "اکبر سیبیلو",
+                "sedasar": {"zomz": 165.0, "javse": 0.8, "nerkh": 8.0, "larz": 0.12},
+                "harfha": {
                         "idle": ["سلام سلام! اکبرم؛ سیبیلوم، لونگم، نیسانم آبی!", "مأموریت امروز سخته، ولی ما از اون سخت‌تریم!", "تو این محل هیچ‌کس با اکبر رقابت نمی‌کنه، جز چراغ قرمز!", "گازِ نیسان که می‌ره پایین، حرفم بالا می‌ره!"],
                         "go": ["جا خالی کن! لونگو بستیم، رفتیم!"],
                         "nitro": ["حالا نیسان رو ببین چجوری می‌پره!"],
@@ -372,9 +372,9 @@ const PERSONAS := {
                 },
         },
         "ustad": {
-                "nick": "استاد فنر",
-                "voice": {"pitch": 210.0, "tone": 0.5, "rate": 8.0, "jit": 0.12},
-                "lines": {
+                "lakeb": "استاد فنر",
+                "sedasar": {"zomz": 210.0, "javse": 0.5, "nerkh": 8.0, "larz": 0.12},
+                "harfha": {
                         "idle": ["بیا بیا! ماشینت رو به من بسپار!", "آچار شماره‌ی چهارده کو؟!", "کارِ استاد که تمیزه دیگه!", "سیبیلَم رو بوس بزن، کارتم تمومه!"],
                         "upgrade": ["هیس... الان صدای موتور رو ببین!"],
                         "buy": ["انتخابِ خوبی بود جوانمرد!"],
@@ -384,7 +384,7 @@ const PERSONAS := {
 }
 
 ## بانک کری کوچه‌بازاری — تیکه‌های شیرینِ بعد از خط پایان (بدون فحش؛ بازارپسند)
-const RIVAL_TAUNTS := [
+const TAANEHA := [
         "بیا برس! نه، الان که نمی‌رسه!",
         "آینه رو نگاه کن که کی رد شد!",
         "چراغ قرمز هم دنبالت می‌گرده!",
@@ -401,206 +401,206 @@ const RIVAL_TAUNTS := [
         "گاز کافیه، عامل کمه!",
 ]
 
-const MOODS := {
+const HALEHA := {
         "idle": "chill", "select": "happy", "buy": "happy", "poor": "grumpy",
         "upgrade": "happy", "go": "happy", "nitro": "happy", "hit": "grumpy",
         "win": "happy", "lose": "chill", "boost": "happy", "taunt": "happy",
 }
 
-static var _last_idle := {}
-static var _srg := RandomNumberGenerator.new()
+static var _akharin_aram := {}
+static var _tasadofi_sabet := RandomNumberGenerator.new()
 
-var bubble: Control = null
-var voice_player: AudioStreamPlayer = null
-var voice_enabled := false # صدای لاله‌زبان خاموش (بازخورد کاربر: «صدا زشته») — حباب متنی کافی است
-var _rng := RandomNumberGenerator.new()
-var _car_idx := 0
+var hobab: Control = null
+var pakhsh_ava: AudioStreamPlayer = null
+var ava_fa_al := false # صدای لاله‌زبان خاموش (بازخورد کاربر: «صدا زشته») — حباب متنی کافی است
+var _tasadofi := RandomNumberGenerator.new()
+var _nesh_mashin := 0
 
 func _ready() -> void:
-        _rng.randomize()
-        voice_player = AudioStreamPlayer.new()
-        voice_player.volume_db = -2.0
-        add_child(voice_player)
+        _tasadofi.randomize()
+        pakhsh_ava = AudioStreamPlayer.new()
+        pakhsh_ava.volume_db = -2.0
+        add_child(pakhsh_ava)
 
 ## خطِ تصادفی برای ماشین و موقعیت — اگر تیکه‌ی شخصی نداشت از بانک عمومیِ کری شلیک می‌شود
-static func pick_line(car_id: String, ctx: String) -> String:
-        if not PERSONAS.has(car_id):
+static func goftare_begozin(shenase_mashin: String, vaqeiat: String) -> String:
+        if not SHAKHSIATHA.has(shenase_mashin):
                 return ""
-        var pool: Array = PERSONAS[car_id]["lines"].get(ctx, [])
-        if pool.is_empty() and ctx == "taunt":
-                pool = RIVAL_TAUNTS
-        if pool.is_empty():
+        var hoozeh: Array = SHAKHSIATHA[shenase_mashin]["harfha"].get(vaqeiat, [])
+        if hoozeh.is_empty() and vaqeiat == "taunt":
+                hoozeh = TAANEHA
+        if hoozeh.is_empty():
                 return ""
-        var key := car_id + ":" + ctx
-        var last: int = int(_last_idle.get(key, -1))
-        var i := _srg.randi_range(0, pool.size() - 1)
-        if pool.size() > 1 and i == last:
-                i = (i + 1) % pool.size()
-        _last_idle[key] = i
-        return str(pool[i])
+        var klid := shenase_mashin + ":" + vaqeiat
+        var pishin: int = int(_akharin_aram.get(klid, -1))
+        var i := _tasadofi_sabet.randi_range(0, hoozeh.size() - 1)
+        if hoozeh.size() > 1 and i == pishin:
+                i = (i + 1) % hoozeh.size()
+        _akharin_aram[klid] = i
+        return str(hoozeh[i])
 
 ## سکوت همیشگی نیست — ماشین‌ها هر از چندی خودشان حرف می‌زنند
-func start_idle_chatter(anchor_getter: Callable, car_ids_getter: Callable, min_wait := 7.0, max_wait := 13.0) -> void:
+func gap_aram(langar_sazi: Callable, shenase_sazi: Callable, intezar_kam := 7.0, intezar_bis := 13.0) -> void:
         var t := Timer.new()
-        t.wait_time = _rng.randf_range(min_wait, max_wait)
+        t.wait_time = _tasadofi.randf_range(intezar_kam, intezar_bis)
         t.one_shot = false
         t.timeout.connect(func():
-                var ids: Array = car_ids_getter.call()
-                if ids.is_empty():
+                var shenaseha: Array = shenase_sazi.call()
+                if shenaseha.is_empty():
                         return
-                var cid: String = ids[_rng.randi_range(0, ids.size() - 1)]
-                var anchor: Control = anchor_getter.call(cid)
-                if anchor != null and anchor.is_visible_in_tree():
-                        say(anchor, cid, "idle")
-                t.wait_time = _rng.randf_range(min_wait, max_wait))
+                var shenase: String = shenaseha[_tasadofi.randi_range(0, shenaseha.size() - 1)]
+                var langar: Control = langar_sazi.call(shenase)
+                if langar != null and langar.is_visible_in_tree():
+                        begu(langar, shenase, "idle")
+                t.wait_time = _tasadofi.randf_range(intezar_kam, intezar_bis))
         add_child(t)
         t.start()
 
 ## حبابِ گفتار باز می‌شود + صدای لاله‌زبانِ همان ماشین پخش می‌شود
-func say(anchor: Control, car_id: String, ctx: String) -> void:
-        if not PERSONAS.has(car_id):
+func begu(langar: Control, shenase_mashin: String, vaqeiat: String) -> void:
+        if not SHAKHSIATHA.has(shenase_mashin):
                 return
-        var line := pick_line(car_id, ctx)
-        if line.is_empty():
+        var khat_harf := goftare_begozin(shenase_mashin, vaqeiat)
+        if khat_harf.is_empty():
                 return
-        for i in Globals.CARS.size():
-                if str(Globals.CARS[i]["id"]) == car_id:
-                        _car_idx = i
+        for i in Saman.MASHINHA.size():
+                if str(Saman.MASHINHA[i]["shenase"]) == shenase_mashin:
+                        _nesh_mashin = i
                         break
-        _show_bubble(anchor, line)
-        _speak(line, car_id, str(MOODS.get(ctx, "chill")))
-        CarBrain.wobble(anchor)
+        _hobab_neshan(langar, khat_harf)
+        _ava_sazi(khat_harf, shenase_mashin, str(HALEHA.get(vaqeiat, "chill")))
+        Shakhsiat.larzesh_kon(langar)
 
-func _show_bubble(anchor: Control, text: String) -> void:
-        if bubble != null:
-                bubble.queue_free()
-                bubble = null
-        var b := Bubble.new()
-        b.brain = self
-        b.set_text(text)
-        var bfont: Resource = load("res://assets/fonts/Lalezar-Regular.ttf")
-        if bfont is FontFile:
-                b.add_theme_font_override("font", bfont)
-        var top := anchor.global_position
+func _hobab_neshan(langar: Control, text: String) -> void:
+        if hobab != null:
+                hobab.queue_free()
+                hobab = null
+        var b := Hobab.new()
+        b.saheb = self
+        b.matn_bezan(text)
+        var khatt_e: Resource = load("res://assets/fonts/Lalezar-Regular.ttf")
+        if khatt_e is FontFile:
+                b.add_theme_font_override("font", khatt_e)
+        var top := langar.global_position
         var w := maxf(190.0, minf(400.0, text.length() * 13.0 + 70.0))
         b.size = Vector2(w, 0)
-        var px := top.x + anchor.size.x * 0.5 - w * 0.5
+        var px := top.x + langar.size.x * 0.5 - w * 0.5
         px = clampf(px, 12.0, 1280.0 - w - 12.0)
         var py := top.y - 86.0
         if py < 8.0:
-                py = top.y + anchor.size.y + 10.0
+                py = top.y + langar.size.y + 10.0
         b.position = Vector2(px, py)
         b.z_index = 60
-        var parent_node := anchor.get_parent()
-        if parent_node == null:
-                parent_node = self
-        parent_node.add_child(b)
-        bubble = b
+        var greh_padar := langar.get_parent()
+        if greh_padar == null:
+                greh_padar = self
+        greh_padar.add_child(b)
+        hobab = b
 
 ## صدای لاله‌زبان — یک جمله‌ی بی‌کلامِ آهنگین که شخصیتِ ماشین را می‌سازد
-func _speak(text: String, car_id: String, mood: String) -> void:
-        if not voice_enabled:
+func _ava_sazi(text: String, shenase_mashin: String, halat: String) -> void:
+        if not ava_fa_al:
                 return # پیش‌فرض سکوت — ریتم طنز از متن می‌آید نه از بوق سینوسی
-        var v: Dictionary = PERSONAS[car_id]["voice"] if PERSONAS.has(car_id) else {"pitch": 300.0, "tone": 0.5, "rate": 10.0, "jit": 0.15}
-        var pitch := float(v["pitch"])
-        var tone := float(v["tone"])
-        var rate := float(v["rate"])
-        var jit := float(v["jit"])
-        var syl_dur := 1.0 / rate
-        var dur := clampf(0.25 + text.length() * 0.045, 0.45, 2.4)
-        var syls := int(ceil(dur / syl_dur))
-        var sr := 22050
-        var n := int(dur * sr)
-        var data := PackedByteArray()
-        data.resize(n * 2)
-        var phase := 0.0
-        for k in syls:
-                var syl_pitch := pitch * (1.0 + _rng.randf_range(-jit, jit))
-                if mood == "happy":
-                        syl_pitch *= 1.0 + 0.06 * float(k) / float(syls) # آهنگین رو به بالا
-                elif mood == "grumpy":
-                        syl_pitch *= 1.0 - 0.05 * float(k) / float(syls)
-                var step := 2.0 * PI * syl_pitch / float(sr)
-                var s0 := int(float(k) * syl_dur * sr)
-                var s1: int = min(n, int(float(k + 1) * syl_dur * sr) - int(sr * 0.02))
+        var v: Dictionary = SHAKHSIATHA[shenase_mashin]["sedasar"] if SHAKHSIATHA.has(shenase_mashin) else {"zomz": 300.0, "javse": 0.5, "nerkh": 10.0, "larz": 0.15}
+        var pitch := float(v["zomz"])
+        var tone := float(v["javse"])
+        var rate := float(v["nerkh"])
+        var jit := float(v["larz"])
+        var moddat_seela := 1.0 / rate
+        var moddat := clampf(0.25 + text.length() * 0.045, 0.45, 2.4)
+        var seelaha := int(ceil(moddat / moddat_seela))
+        var nerkh_namune := 22050
+        var tedad := int(moddat * nerkh_namune)
+        var dadeh := PackedByteArray()
+        dadeh.resize(tedad * 2)
+        var sahne := 0.0
+        for k in seelaha:
+                var zomz_seela := pitch * (1.0 + _tasadofi.randf_range(-jit, jit))
+                if halat == "happy":
+                        zomz_seela *= 1.0 + 0.06 * float(k) / float(seelaha) # آهنگین رو به بالا
+                elif halat == "grumpy":
+                        zomz_seela *= 1.0 - 0.05 * float(k) / float(seelaha)
+                var ghaam := 2.0 * PI * zomz_seela / float(nerkh_namune)
+                var s0 := int(float(k) * moddat_seela * nerkh_namune)
+                var s1: int = min(tedad, int(float(k + 1) * moddat_seela * nerkh_namune) - int(nerkh_namune * 0.02))
                 for i in range(s0, s1):
-                        var tt := float(i - s0) / float(sr)
-                        var in_syl := float(i - s0) / float(syl_dur * sr)
-                        var env := pow(maxf(0.0, sin(PI * clampf(in_syl, 0.0, 1.0))), 0.65)
-                        if tt < 0.01 or tt > syl_dur - 0.03:
-                                env = 0.0
-                        var s := sin(phase)
-                        var sq := signf(s)
-                        var wob := 1.0 + 0.02 * sin(2.0 * PI * 6.0 * tt)
-                        var amp := env * 0.34 * wob
-                        var val := (1.0 - tone) * s + tone * sq
-                        var iv := int(clampf(val * amp, -1.0, 1.0) * 32767.0)
-                        data.encode_s16(i * 2, iv)
-                        phase += step
-        var wav := AudioStreamWAV.new()
-        wav.format = AudioStreamWAV.FORMAT_16_BITS
-        wav.mix_rate = sr
-        wav.stereo = false
-        wav.data = data
-        voice_player.stream = wav
-        voice_player.pitch_scale = 1.0
-        voice_player.play()
+                        var tt := float(i - s0) / float(nerkh_namune)
+                        var dar_seela := float(i - s0) / float(moddat_seela * nerkh_namune)
+                        var posh := pow(maxf(0.0, sin(PI * clampf(dar_seela, 0.0, 1.0))), 0.65)
+                        if tt < 0.01 or tt > moddat_seela - 0.03:
+                                posh = 0.0
+                        var s := sin(sahne)
+                        var moraba := signf(s)
+                        var nam_e := 1.0 + 0.02 * sin(2.0 * PI * 6.0 * tt)
+                        var damane := posh * 0.34 * nam_e
+                        var meghdar := (1.0 - tone) * s + tone * moraba
+                        var daghigh := int(clampf(meghdar * damane, -1.0, 1.0) * 32767.0)
+                        dadeh.encode_s16(i * 2, daghigh)
+                        sahne += ghaam
+        var jaryan := AudioStreamWAV.new()
+        jaryan.format = AudioStreamWAV.FORMAT_16_BITS
+        jaryan.mix_rate = nerkh_namune
+        jaryan.stereo = false
+        jaryan.dadeh = dadeh
+        pakhsh_ava.stream = jaryan
+        pakhsh_ava.pitch_scale = 1.0
+        pakhsh_ava.play()
 
 ## نفس‌کشیدن دائمی ماشین‌ها — حس زنده بودن مثل انیمیشن‌های معروف
-static func add_breathing(ctrl: Control, amp := 3.5, dur := 1.3) -> void:
-        var base := ctrl.position.y
-        var t := ctrl.create_tween().set_loops()
-        t.tween_property(ctrl, "position:y", base - amp, dur).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-        t.tween_property(ctrl, "position:y", base + amp * 0.4, dur).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+static func nafas(greh_e: Control, damane := 3.5, moddat := 1.3) -> void:
+        var paye := greh_e.position.y
+        var t := greh_e.create_tween().set_loops()
+        t.tween_property(greh_e, "position:y", paye - damane, moddat).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+        t.tween_property(greh_e, "position:y", paye + damane * 0.4, moddat).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 
 ## جست‌وخیزِ لحظه‌ی حرف زدن — با مقیاس و چرخش تا با تنفسِ دائمی تداخل نکند
-static func wobble(ctrl: Control) -> void:
-        if ctrl == null or not is_instance_valid(ctrl):
+static func larzesh_kon(greh_e: Control) -> void:
+        if greh_e == null or not is_instance_valid(greh_e):
                 return
-        var t := ctrl.create_tween()
-        t.tween_property(ctrl, "rotation_degrees", 2.2, 0.09).set_trans(Tween.TRANS_SINE)
-        t.parallel().tween_property(ctrl, "scale", ctrl.scale * Vector2(1.03, 1.07), 0.09).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-        t.tween_property(ctrl, "rotation_degrees", -1.6, 0.12).set_trans(Tween.TRANS_SINE)
-        t.tween_property(ctrl, "rotation_degrees", 0.0, 0.1)
-        t.parallel().tween_property(ctrl, "scale", Vector2.ONE, 0.14).set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
+        var t := greh_e.create_tween()
+        t.tween_property(greh_e, "rotation_degrees", 2.2, 0.09).set_trans(Tween.TRANS_SINE)
+        t.parallel().tween_property(greh_e, "scale", greh_e.scale * Vector2(1.03, 1.07), 0.09).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+        t.tween_property(greh_e, "rotation_degrees", -1.6, 0.12).set_trans(Tween.TRANS_SINE)
+        t.tween_property(greh_e, "rotation_degrees", 0.0, 0.1)
+        t.parallel().tween_property(greh_e, "scale", Vector2.ONE, 0.14).set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
 
 ## حبابِ گفتار — پنل کرم با دنباله، متن با افکت تایپ
-class Bubble extends Control:
-        var lbl: Label
-        var brain: CarBrain
+class Hobab extends Control:
+        var yazanak: Label
+        var saheb: Shakhsiat
         var _t := 0.0
         var _total := 0.0
         var _hold := 0.0
 
-        func set_text(text: String) -> void:
-                var sb := StyleBoxFlat.new()
-                sb.bg_color = Color(0.99, 0.965, 0.88, 0.97)
-                sb.set_corner_radius_all(16)
-                sb.border_color = Color(0.29, 0.216, 0.157)
-                sb.border_width_left = 3
-                sb.border_width_right = 3
-                sb.border_width_top = 3
-                sb.border_width_bottom = 3
-                sb.shadow_color = Color(0, 0, 0, 0.3)
-                sb.shadow_size = 6
+        func matn_bezan(text: String) -> void:
+                var ghalati := StyleBoxFlat.new()
+                ghalati.bg_color = Color(0.99, 0.965, 0.88, 0.97)
+                ghalati.set_corner_radius_all(16)
+                ghalati.border_color = Color(0.29, 0.216, 0.157)
+                ghalati.border_width_left = 3
+                ghalati.border_width_right = 3
+                ghalati.border_width_top = 3
+                ghalati.border_width_bottom = 3
+                ghalati.shadow_color = Color(0, 0, 0, 0.3)
+                ghalati.shadow_size = 6
                 var panel := PanelContainer.new()
-                panel.add_theme_stylebox_override("panel", sb)
+                panel.add_theme_stylebox_override("panel", ghalati)
                 panel.set_anchors_preset(Control.PRESET_FULL_RECT)
-                lbl = Label.new()
-                lbl.text = text
-                lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-                lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-                lbl.add_theme_font_size_override("font_size", 24)
-                lbl.add_theme_color_override("font_color", Color(0.22, 0.14, 0.07))
+                yazanak = Label.new()
+                yazanak.text = text
+                yazanak.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+                yazanak.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+                yazanak.add_theme_font_size_override("font_size", 24)
+                yazanak.add_theme_color_override("font_color", Color(0.22, 0.14, 0.07))
                 var m := MarginContainer.new()
                 m.add_theme_constant_override("margin_left", 16)
                 m.add_theme_constant_override("margin_right", 16)
                 m.add_theme_constant_override("margin_top", 10)
                 m.add_theme_constant_override("margin_bottom", 14)
-                m.add_child(lbl)
+                m.add_child(yazanak)
                 panel.add_child(m)
                 add_child(panel)
-                lbl.visible_characters = 0
+                yazanak.visible_characters = 0
                 _total = float(text.length())
                 _hold = _total * 0.055 + 1.3
 
@@ -612,8 +612,8 @@ class Bubble extends Control:
 
         func _process(delta: float) -> void:
                 _t += delta
-                if lbl != null and _t < _total * 0.055:
-                        lbl.visible_characters = int(_t / 0.055) + 1
+                if yazanak != null and _t < _total * 0.055:
+                        yazanak.visible_characters = int(_t / 0.055) + 1
                 if _t > _hold:
                         modulate.a -= delta * 2.5
                         position.y -= delta * 14.0

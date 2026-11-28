@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dq1xx276igoni"
-path="res://.godot/imported/splash.png-9ffdfe26897c9006e0a009263e94d08a.ctex"
+uid="uid://c2qlcuu2s782s"
+path="res://.godot/imported/nissan_top.png-cdd3c7081eb0ed80b1c47f0eab6391fa.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/splash.png"
-dest_files=["res://.godot/imported/splash.png-9ffdfe26897c9006e0a009263e94d08a.ctex"]
+source_file="res://assets/sprites/nissan_top.png"
+dest_files=["res://.godot/imported/nissan_top.png-cdd3c7081eb0ed80b1c47f0eab6391fa.ctex"]
 
 [params]
 

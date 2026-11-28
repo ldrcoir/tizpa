@@ -1,21 +1,19 @@
-; Engine configuration file - Boghi City Tour
+; Engine configuration file - Tiz Pa | تیز پا
 config_version=5
 
 [application]
 
 config/name="Tiz Pa | تیز پا"
-run/main_scene="res://scenes/boot.tscn"
+run/main_scene="res://scenes/aghaz.tscn"
 config/features=PackedStringArray("4.7")
-boot_splash/bg_color=Color(0.117647, 0.0705882, 0.0392157, 1)
-boot_splash/show_image=true
-boot_splash/image="res://assets/sprites/splash.png"
-boot_splash/fullsize=false
+boot_splash/bg_color=Color(0.055, 0.045, 0.055, 1)
+boot_splash/show_image=false
 config/icon="res://icon.png"
 
 [autoload]
 
-Globals="*res://scripts/globals.gd"
-AudioMgr="*res://scripts/audio_mgr.gd"
+Saman="*res://scripts/saman.gd"
+Sedasan="*res://scripts/sedasan.gd"
 
 [debug]
 
