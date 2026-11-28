@@ -51,4 +51,4 @@
 - data/track_<tid>.json + assets/sprites/l<id>_map_<0..3>.jpg (پیش‌رندر gen_tizpa_maps.py)
 - scripts/saman.gd: هسته (مراحل/متن/ذخیره) — scripts/mosabeghe_3d.gd: صحنه مسابقه سه‌بعدی
 - ذخیره: user://tizpa_save.json — ستاره‌ها + رکوردها
-- اندروید: package com.caspianstudio.tizpa، امضا keys/debug.keystore (sha256 همیشگی 9874b1d6)
+- اندروید: package com.caspianstudio.tizpa، امضا keys/debug.keystore (sha256: cf869f90…)

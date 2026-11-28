@@ -363,6 +363,7 @@ func _saz_jahan() -> void:
 	rad_ha = RadLastik.new()
 	jahan.add_child(rad_ha)
 
+	_saz_jaddeh(shab)
 	_saz_sakhtemanha(shab)
 	_saz_mavaneh(shab)
 	_saz_khat_shoroo()
@@ -526,7 +527,7 @@ func _saz_khat_shoroo() -> void:
 	var jahat := _masir_jahat(0.0)
 	var tha := jahat.angle()
 	khat_shoroo = Node3D.new()
-	khat_shoroo.position = _j3(shoroo_ja, 0.06)
+	khat_shoroo.position = _j3(shoroo_ja, 0.16)
 	khat_shoroo.rotation.y = _charkh3(tha)
 	jahan.add_child(khat_shoroo)
 	var img := Image.create(16, 4, false, Image.FORMAT_RGBA8)
@@ -603,6 +604,158 @@ func _mosatil_mesh(gosheh: Vector2, andaze: Vector2, tex: Texture2D) -> ArrayMes
 	mat.roughness = 0.96
 	st.set_material(mat)
 	return st.commit()
+
+## نوار پیوسته در فاصله‌ای از خط مرکز — مثلث‌ها با نرمال +Y (رو به دوربین)
+func _navar_masir(fasile: float, pahna: float, ertefa: float, mat: Material) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for i in gheteh_a.size():
+		var a: Vector2 = gheteh_a[i]
+		var dir: Vector2 = gheteh_jahat[i]
+		var perp := Vector2(-dir.y, dir.x)
+		var b: Vector2 = a + dir * (gheteh_tool[i] + 6.0)
+		st.set_normal(Vector3.UP)
+		st.add_vertex(_j3(a + perp * (fasile - pahna * 0.5), ertefa))
+		st.add_vertex(_j3(b + perp * (fasile - pahna * 0.5), ertefa))
+		st.add_vertex(_j3(b + perp * (fasile + pahna * 0.5), ertefa))
+		st.add_vertex(_j3(a + perp * (fasile + pahna * 0.5), ertefa))
+		var o := i * 4
+		st.add_index(o); st.add_index(o + 2); st.add_index(o + 1)
+		st.add_index(o); st.add_index(o + 3); st.add_index(o + 2)
+	st.set_material(mat)
+	return st.commit()
+
+## خط‌چین روی جاده — دَش‌ها در گام منظم
+func _navar_chape(mat: Material, fasile: float, pahna: float, ertefa: float, gham: float, tool_dash: float) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var v := 0
+	for i in gheteh_a.size():
+		var a: Vector2 = gheteh_a[i]
+		var dir: Vector2 = gheteh_jahat[i]
+		var perp := Vector2(-dir.y, dir.x)
+		var t := gham * 0.5
+		while t < gheteh_tool[i]:
+			var c: Vector2 = a + dir * t
+			st.set_normal(Vector3.UP)
+			st.add_vertex(_j3(c - dir * (tool_dash * 0.5) - perp * (pahna * 0.5), ertefa))
+			st.add_vertex(_j3(c + dir * (tool_dash * 0.5) - perp * (pahna * 0.5), ertefa))
+			st.add_vertex(_j3(c + dir * (tool_dash * 0.5) + perp * (pahna * 0.5), ertefa))
+			st.add_vertex(_j3(c - dir * (tool_dash * 0.5) + perp * (pahna * 0.5), ertefa))
+			st.add_index(v); st.add_index(v + 2); st.add_index(v + 1)
+			st.add_index(v); st.add_index(v + 3); st.add_index(v + 2)
+			v += 4
+			t += gham
+	st.set_material(mat)
+	return st.commit()
+
+## آسفالت + خط‌کشی + جدول + چراغ برق + درخت — چیزهایی که از پشت ماشین دیده می‌شوند
+func _saz_jaddeh(shab: bool) -> void:
+	var nesf := pahna_rah * 0.5
+	var asfalt := StandardMaterial3D.new()
+	asfalt.albedo_color = Color(0.105, 0.105, 0.12) if not shab else Color(0.085, 0.085, 0.10)
+	asfalt.roughness = 0.94
+	var asfalt_greh := MeshInstance3D.new()
+	asfalt_greh.mesh = _navar_masir(0.0, pahna_rah + 16.0, 0.05, asfalt)
+	jahan.add_child(asfalt_greh)
+	var khat_mat := StandardMaterial3D.new()
+	khat_mat.albedo_color = Color(0.88, 0.87, 0.78)
+	khat_mat.roughness = 0.6
+	if shab:
+		khat_mat.emission_enabled = true
+		khat_mat.emission = Color(0.8, 0.8, 0.7)
+		khat_mat.emission_energy_multiplier = 0.25
+	for tarafe in [-1.0, 1.0]:
+		var lab := MeshInstance3D.new()
+		lab.mesh = _navar_masir(tarafe * (nesf - 10.0), 7.0, 0.12, khat_mat)
+		jahan.add_child(lab)
+	var vasat := MeshInstance3D.new()
+	vasat.mesh = _navar_chape(khat_mat, 0.0, 11.0, 0.12, 170.0, 85.0)
+	jahan.add_child(vasat)
+	var jadval_mat := StandardMaterial3D.new()
+	jadval_mat.albedo_color = Color(0.58, 0.565, 0.53) if not shab else Color(0.28, 0.28, 0.30)
+	jadval_mat.roughness = 0.9
+	for tarafe in [-1.0, 1.0]:
+		var jadval := MeshInstance3D.new()
+		jadval.mesh = _navar_masir(tarafe * (nesf + 9.0), 18.0, 0.10, jadval_mat)
+		jahan.add_child(jadval)
+	_saz_cheraghha(shab, nesf)
+	_saz_derakhtan(shab, nesf)
+
+func _saz_cheraghha(shab: bool, nesf: float) -> void:
+	var mil_mat := StandardMaterial3D.new()
+	mil_mat.albedo_color = Color(0.35, 0.37, 0.40)
+	mil_mat.metallic = 0.6
+	mil_mat.roughness = 0.5
+	var sar_mat := StandardMaterial3D.new()
+	sar_mat.albedo_color = Color(0.9, 0.88, 0.8)
+	if shab:
+		sar_mat.emission_enabled = true
+		sar_mat.emission = Color(1.0, 0.85, 0.55)
+		sar_mat.emission_energy_multiplier = 3.0
+	var taraf := 1.0
+	var s := 170.0
+	while s < tool_masir:
+		var ja: Vector2 = _masir_ja(s)
+		var dir: Vector2 = _masir_jahat(s)
+		var perp := Vector2(-dir.y, dir.x)
+		taraf = -taraf
+		var paye := ja + perp * taraf * (nesf + 34.0)
+		var mil := MeshInstance3D.new()
+		var mm := CylinderMesh.new()
+		mm.top_radius = 4.0
+		mm.bottom_radius = 6.0
+		mm.height = 330.0
+		mil.mesh = mm
+		mil.material_override = mil_mat
+		mil.position = _j3(paye, 165.0)
+		jahan.add_child(mil)
+		var sar := MeshInstance3D.new()
+		var bm := BoxMesh.new()
+		bm.size = Vector3(64.0, 10.0, 18.0)
+		sar.mesh = bm
+		sar.material_override = sar_mat
+		sar.position = _j3(paye - perp * taraf * 24.0, 330.0)
+		sar.rotation.y = _charkh3(dir.angle())
+		jahan.add_child(sar)
+		s += 380.0
+
+func _saz_derakhtan(shab: bool, nesf: float) -> void:
+	if shab:
+		return
+	var tan_mat := StandardMaterial3D.new()
+	tan_mat.albedo_color = Color(0.30, 0.22, 0.14)
+	tan_mat.roughness = 1.0
+	var barg_mat := StandardMaterial3D.new()
+	barg_mat.albedo_color = Color(0.13, 0.30, 0.12)
+	barg_mat.roughness = 1.0
+	var taraf := -1.0
+	var s := 130.0
+	while s < tool_masir:
+		var ja: Vector2 = _masir_ja(s)
+		var dir: Vector2 = _masir_jahat(s)
+		var perp := Vector2(-dir.y, dir.x)
+		taraf = -taraf
+		var paye := ja + perp * taraf * (nesf + 80.0)
+		var tan := MeshInstance3D.new()
+		var tm := CylinderMesh.new()
+		tm.top_radius = 7.0
+		tm.bottom_radius = 10.0
+		tm.height = 90.0
+		tan.mesh = tm
+		tan.material_override = tan_mat
+		tan.position = _j3(paye, 45.0)
+		jahan.add_child(tan)
+		for barg in [[Vector3(0, 120, 0), 52.0], [Vector3(20, 100, -16), 38.0], [Vector3(-18, 105, 14), 34.0]]:
+			var barg_greh := MeshInstance3D.new()
+			var sm := SphereMesh.new()
+			sm.radius = float(barg[1])
+			sm.height = float(barg[1]) * 2.0
+			barg_greh.mesh = sm
+			barg_greh.material_override = barg_mat
+			barg_greh.position = _j3(paye, 0.0) + barg[0]
+			jahan.add_child(barg_greh)
+		s += 300.0
 
 # ───────────────────────── ماشین‌ها ─────────────────────────
 
@@ -981,7 +1134,7 @@ class RadLastik extends MultiMeshInstance3D:
 
 	func ezafe(p: Vector2, tha: float) -> void:
 		var b := Basis(Vector3.UP, -tha)
-		multimesh.set_instance_transform(shomare, Transform3D(b, Vector3(p.x, 0.10, p.y)))
+		multimesh.set_instance_transform(shomare, Transform3D(b, Vector3(p.x, 0.22, p.y)))
 		shomare = (shomare + 1) % TEDAD
 
 # ───────────────────────── HUD ─────────────────────────

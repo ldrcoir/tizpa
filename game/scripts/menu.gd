@@ -367,13 +367,13 @@ func _saz_darbare() -> void:
 	var vb: VBoxContainer = poste_darbare.get_child(0)
 	vb.add_child(_onvan_panel("درباره ما"))
 	var pooyesh := Label.new()
-	pooyesh.text = "پژوهی سرای امام هادی، هلیا موزونی."
+	pooyesh.text = "پژوهش سرای امام هادی (ع)\n\nهلیا موزونی\n\nاستاد راهنما: مهندس احسان مراد"
 	pooyesh.add_theme_font_override("font", khatt)
-	pooyesh.add_theme_font_size_override("font_size", 34)
+	pooyesh.add_theme_font_size_override("font_size", 32)
 	pooyesh.add_theme_color_override("font_color", Color(0.94, 0.92, 0.88))
 	pooyesh.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	pooyesh.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	pooyesh.custom_minimum_size = Vector2(0, 160)
+	pooyesh.custom_minimum_size = Vector2(0, 240)
 	vb.add_child(pooyesh)
 	vb.add_child(_saf_pusht(poste_darbare))
 
